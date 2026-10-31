@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>노면·도로 선호도 지도 | 서울</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#14181f; --ink-2:#4a5260; --ink-3:#8a93a3;
+    --line:#e4e7ec; --accent:#2457d6; --accent-soft:#e8eefc;
+    --bad:#d7301f; --mid:#f2b134; --good:#1a9850;
+    --radius:12px; --shadow:0 6px 24px rgba(16,24,40,.10);
+    --font:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:var(--font);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+  button,input,select{font-family:inherit}
+  .app{display:grid;grid-template-columns:360px 1fr;grid-template-rows:56px 1fr;height:100vh;height:100dvh}
+  header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);z-index:1001}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.2px}
+  .brand-mark{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--bad),var(--mid) 50%,var(--good));}
+  .status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:12px;white-space:nowrap}
+  .badge.live{background:#e7f6ec;color:#137a3a}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .badge.live .dot{animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;height:34px;padding:0 12px;font-size:13px;color:var(--ink);cursor:pointer}
+  .icon-btn:hover{background:var(--bg)}
+  #panelToggle{display:none}
+
+  aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:16px 16px 28px;z-index:1000}
+  .section{margin-bottom:20px}
+  .section h2{font-size:13px;font-weight:700;color:var(--ink-2);margin:0 0 10px;letter-spacing:-.1px;display:flex;align-items:center;justify-content:space-between}
+  .section h2 small{font-weight:500;color:var(--ink-3)}
+  .card{border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  .wx{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+  .wx div b{display:block;font-size:17px;font-weight:700}
+  .wx div span{font-size:11px;color:var(--ink-3)}
+  .meta{font-size:11px;color:var(--ink-3);margin-top:8px;line-height:1.5}
+
+  .factor{display:grid;grid-template-columns:22px 1fr auto;align-items:start;gap:8px;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+  .factor:last-child{border-bottom:0}
+  .factor input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--accent);cursor:pointer}
+  .factor .name{font-size:14px;font-weight:600}
+  .factor .desc{font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.4}
+  .tag{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:1px}
+  .tag.real{background:#e7f6ec;color:#137a3a}
+  .tag.est{background:#fff4dc;color:#9a6200}
+  .coef{font-variant-numeric:tabular-nums;font-size:12px;font-weight:700;text-align:right;min-width:62px}
+  .coef .bar{height:4px;border-radius:2px;background:var(--line);margin-top:6px;position:relative;overflow:hidden}
+  .coef .bar i{position:absolute;top:0;bottom:0;border-radius:2px}
+  .coef.off{color:var(--ink-3);font-weight:500}
+  .pos{color:var(--good)} .neg{color:var(--bad)}
+
+  .model{background:#0f1729;color:#dbe4ff;border-radius:var(--radius);padding:12px 14px;font-size:12.5px;line-height:1.6}
+  .model .formula{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-word;color:#fff}
+  .model .stats{display:flex;gap:14px;margin-top:8px;color:#9fb0d9;font-size:11.5px}
+  .model .stats b{color:#fff}
+
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{flex:1;border:0;background:var(--panel);padding:7px 0;font-size:12.5px;cursor:pointer;color:var(--ink-2)}
+  .seg button.on{background:var(--accent);color:#fff;font-weight:600}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 4px;font-size:13px}
+  .row output{font-variant-numeric:tabular-nums;font-weight:700;font-size:12.5px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .hint{font-size:11.5px;color:var(--ink-3);line-height:1.5}
+
+  main{position:relative}
+  #map{position:absolute;inset:0;background:#e9edf2}
+  #map .leaflet-tile-pane{filter:grayscale(1) brightness(1.12) contrast(.72)}
+  .legend{position:absolute;right:14px;bottom:24px;z-index:900;background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px 12px;width:220px;font-size:12px}
+  .legend .grad{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--bad),var(--mid),var(--good));margin:8px 0 4px}
+  .legend .ends{display:flex;justify-content:space-between;color:var(--ink-3);font-size:11px}
+  .legend .title{font-weight:700;display:flex;justify-content:space-between}
+  .legend .title span{font-weight:500;color:var(--ink-3)}
+  .toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:950;background:#14181f;color:#fff;font-size:12.5px;padding:8px 14px;border-radius:999px;box-shadow:var(--shadow);opacity:0;transition:opacity .25s;pointer-events:none}
+  .toast.show{opacity:1}
+
+  .leaflet-popup-content{margin:12px 14px;font-family:var(--font);min-width:230px}
+  .pp-title{font-weight:700;font-size:14px}
+  .pp-sub{font-size:11.5px;color:var(--ink-3);margin:2px 0 8px}
+  .pp-score{display:flex;align-items:baseline;gap:6px;margin-bottom:8px}
+  .pp-score b{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+  .pp-score .chip{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .pp-table{width:100%;border-collapse:collapse;font-size:12px}
+  .pp-table td{padding:3px 0;border-top:1px solid var(--line)}
+  .pp-table td:nth-child(2),.pp-table td:nth-child(3){text-align:right;font-variant-numeric:tabular-nums}
+  .pp-table td:nth-child(3){font-weight:700;width:52px}
+
+  @media (max-width:820px){
+    .app{grid-template-columns:1fr}
+    #panelToggle{display:inline-flex;align-items:center}
+    aside{position:fixed;left:0;right:0;bottom:0;max-height:62vh;border-radius:16px 16px 0 0;border-right:0;box-shadow:0 -8px 30px rgba(16,24,40,.18);transform:translateY(calc(100% - 0px));transition:transform .28s ease}
+    aside.open{transform:translateY(0)}
+    .status .src-text{display:none}
+    .legend{bottom:16px;right:10px;width:190px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><div class="brand-mark" aria-hidden="true"></div>도로 선호도 지도</div>
+    <div class="status">
+      <span class="src-text" id="srcText">불러오는 중…</span>
+      <span class="badge" id="modeBadge"><span class="dot"></span><span id="modeText">데모</span></span>
+      <button class="icon-btn" id="panelToggle" aria-expanded="false">⚙ 설정</button>
+    </div>
+  </header>
+
+  <aside id="panel">
+    <div class="section">
+      <h2>현재 날씨 <small id="wxTime"></small></h2>
+      <div class="card">
+        <div class="wx">
+          <div><b id="wxTemp">-</b><span>기온</span></div>
+          <div><b id="wxHum">-</b><span>습도</span></div>
+          <div><b id="wxWind">-</b><span>풍속</span></div>
+          <div><b id="wxRain">-</b><span>강수</span></div>
+        </div>
+        <div class="meta" id="incidentText"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>고려할 항목 <small>체크한 항목으로 회귀식을 다시 맞춥니다</small></h2>
+      <div class="card" id="factorList" style="padding:2px 10px"></div>
+    </div>
+
+    <div class="section">
+      <h2>선호도 회귀식</h2>
+      <div class="model">
+        <div class="formula" id="formula">-</div>
+        <div class="stats">
+          <span>R² <b id="r2">-</b></span>
+          <span>학습 표본 <b id="nTrain">-</b></span>
+          <span>표시 구간 <b id="nLinks">-</b></span>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:8px">계수는 체크한 항목만으로 최소제곱법(OLS)을 다시 풀어서 구합니다. 막대는 표준화 계수(β)로, 각 항목이 점수에 미치는 상대적 크기와 방향을 보여줍니다.</p>
+    </div>
+
+    <div class="section">
+      <h2>색 기준</h2>
+      <div class="seg" id="scaleSeg">
+        <button data-v="relative" class="on">현재 화면 내 비교</button>
+        <button data-v="absolute">절대 점수 0–100</button>
+      </div>
+      <p class="hint" style="margin-top:6px">비교 모드는 보이는 도로 중 가장 나은 곳을 초록, 가장 나쁜 곳을 빨강으로 늘려서 보여줍니다.</p>
+    </div>
+
+    <div class="section" id="scenarioSection">
+      <h2>데모 시나리오 <small>실시간 연결 전 시험용</small></h2>
+      <div class="card">
+        <div class="row"><label for="scRain">10분 강우량</label><output id="scRainOut"></output></div>
+        <input type="range" id="scRain" min="0" max="8" step="0.5" value="0">
+        <div class="row"><label for="scSince">비 그친 뒤 경과</label><output id="scSinceOut"></output></div>
+        <input type="range" id="scSince" min="0" max="240" step="10" value="240">
+        <div class="row"><label for="scTemp">기온</label><output id="scTempOut"></output></div>
+        <input type="range" id="scTemp" min="-8" max="25" step="0.5" value="10">
+        <button class="icon-btn" id="scReset" style="margin-top:10px;width:100%">실제 날씨로 되돌리기</button>
+        <p class="hint" style="margin-top:8px">노면 수막과 결빙 위험은 젖음 추정 엔진의 단순화 버전으로 계산합니다. 도로 형태·속도·혼잡·공사 정보는 실제 스냅샷 값입니다.</p>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="map" role="application" aria-label="도로 선호도 지도"></div>
+    <div class="toast" id="toast"></div>
+    <div class="legend">
+      <div class="title">선호도 점수 <span id="legendMode">화면 내 비교</span></div>
+      <div class="grad"></div>
+      <div class="ends"><span id="legLo">피하기</span><span id="legHi">추천</span></div>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+/* =========================================================================
+   설정
+   - API_BASE: Vercel 서버리스 함수 경로. /api/roads 가 응답하면 실시간 모드,
+     실패하면 아래 내장 데모 스냅샷으로 동작합니다.
+   - REFRESH_MS: 실시간 모드 갱신 주기
+   ========================================================================= */
+const CONFIG = {
+  API_AREA: '/api/area',           // 장소 1곳의 도로·날씨·공사 정보 (?cd=POI009)
+  API_RAIN: '/api/rain',           // 서울시 강우량 요약 (실시간 연결 확인용으로도 사용)
+  API_TRAINING: '/api/training',   // 선택: 실제 학습 데이터(사용자 평가 등)
+  REFRESH_MS: 5 * 60 * 1000,
+  MAX_AREAS: 8,                    // 화면 이동 시 한 번에 불러올 최대 장소 수
+  CENTER: [37.5705, 126.9790],
+  ZOOM: 16
+};
+
+/* 내장 데모 스냅샷: 2026-10-31 서울시 실시간 도시데이터(광화문·덕수궁) 실제 응답 */
+const DEMO = {"source":"서울시 실시간 도시데이터(citydata) · 광화문·덕수궁","updated_at":"2026-10-31 20:55","weather":{"time":"2026-10-31 20:50","temp_c":9.9,"humidity_pct":40.0,"wind_ms":1.3,"precip_type":"없음","rain_10m_mm":0.0},"incidents":[{"type":"공사","detail":"도로보수","info":"소공로 보행환경 개선공사(차로축소| 보도확장) 소공로 서울광장~한국은행앞/양방향 하위1개차로 통제","lat":37.56470083559572,"lng":126.97864791274915,"until":"2026-11-02 07:00"}],"links":[{"link_id":"1000000301","road_name":"종로","start":"종로1가 82-2","end":"종로구청입구교차로","dist_m":46.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.570149,126.979381],[37.570154,126.9799]]},{"link_id":"1000000401","road_name":"종로","start":"종로구청입구교차로","end":"SK빌딩","dist_m":139.0,"speed_kmh":5.0,"congestion":"정체","coords":[[37.57027,126.980953],[37.570262,126.979899],[37.570258,126.979384]]},{"link_id":"1000000703","road_name":"새문안로","start":"구세군회관","end":"뉴질랜드관광청","dist_m":199.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.570212,126.974917],[37.570209,126.974507],[37.570209,126.974372],[37.570223,126.972667]]},{"link_id":"1000000802","road_name":"새문안로","start":"신문로1가 5-4","end":"구세군회관","dist_m":151.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.570115,126.972664],[37.570101,126.974371]]},{"link_id":"1000000803","road_name":"새문안로","start":"신문로1가141","end":"신문로1가 5-4","dist_m":90.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.570101,126.974508],[37.570104,126.974919],[37.570105,126.975055],[37.570109,126.975527]]},{"link_id":"1000000901","road_name":"새문안로","start":"뉴질랜드관광청","end":"신문로1가141","dist_m":42.0,"speed_kmh":36.3,"congestion":"원활","coords":[[37.570218,126.975525],[37.570213,126.975053]]},{"link_id":"1000000902","road_name":"새문안로","start":"신문로1가141","end":"세종로208","dist_m":47.0,"speed_kmh":37.0,"congestion":"원활","coords":[[37.570223,126.976201],[37.570219,126.975664]]},{"link_id":"1000000903","road_name":"새문안로","start":"세종대로사거리","end":"세종대로사거리","dist_m":31.0,"speed_kmh":36.0,"congestion":"원활","coords":[[37.570229,126.976976],[37.570227,126.976624]]},{"link_id":"1000001002","road_name":"새문안로","start":"주한요르단명예영사관","end":"신문로1가141","dist_m":47.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.570111,126.975666],[37.570115,126.976202]]},{"link_id":"1000001003","road_name":"새문안로","start":"세종대로사거리","end":"주한요르단명예영사관","dist_m":67.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.570115,126.976202],[37.570118,126.976626],[37.570121,126.97696]]},{"link_id":"1000001301","road_name":"종로","start":"세종대로사거리","end":"종로1가1-3","dist_m":56.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.570242,126.977756],[37.570231,126.977119]]},{"link_id":"1000001302","road_name":"종로","start":"종로1가1-3","end":"광화문우체국","dist_m":60.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.570249,126.978434],[37.570245,126.977943],[37.570242,126.977756]]},{"link_id":"1000001303","road_name":"종로","start":"광화문우체국","end":"종로구청입구교차로","dist_m":60.0,"speed_kmh":22.0,"congestion":"서행","coords":[[37.570256,126.979248],[37.570251,126.97857]]},{"link_id":"1000001401","road_name":"종로","start":"동아일보사","end":"세종대로사거리","dist_m":59.0,"speed_kmh":18.0,"congestion":"서행","coords":[[37.570123,126.977096],[37.570134,126.977759]]},{"link_id":"1000001402","road_name":"종로","start":"광화문우체국","end":"동아일보사","dist_m":60.0,"speed_kmh":10.5,"congestion":"정체","coords":[[37.570134,126.977759],[37.570137,126.977945],[37.570141,126.978435]]},{"link_id":"1000001403","road_name":"종로","start":"종로구청입구교차로","end":"광화문우체국","dist_m":59.0,"speed_kmh":8.0,"congestion":"정체","coords":[[37.570143,126.978572],[37.570148,126.979245]]},{"link_id":"1000003301","road_name":"청계천로","start":"호주관광청","end":"무교동사거리","dist_m":36.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.568972,126.979361],[37.568943,126.979762]]},{"link_id":"1000003400","road_name":"청계천로","start":"무교동사거리","end":"광교사거리","dist_m":299.0,"speed_kmh":12.0,"congestion":"정체","coords":[[37.569042,126.982712],[37.569267,126.979344]]},{"link_id":"1000003700","road_name":"청계천로","start":"무교동사거리","end":"청계광장","dist_m":188.0,"speed_kmh":3.0,"congestion":"정체","coords":[[37.569031,126.977106],[37.569083,126.977443],[37.569092,126.977544],[37.569092,126.977721],[37.568982,126.979226]]},{"link_id":"1000003801","road_name":"청계천로","start":"청계광장","end":"동아일보사","dist_m":111.0,"speed_kmh":18.0,"congestion":"서행","coords":[[37.569322,126.978346],[37.569388,126.977383],[37.569416,126.977092]]},{"link_id":"1000003802","road_name":"청계천로","start":"동아일보사","end":"무교동사거리","dist_m":64.0,"speed_kmh":18.0,"congestion":"서행","coords":[[37.569276,126.979208],[37.569314,126.978481]]},{"link_id":"1000004101","road_name":"세종대로21길","start":"청계광장","end":"속성변화점","dist_m":77.0,"speed_kmh":19.0,"congestion":"서행","coords":[[37.569053,126.976109],[37.569017,126.976259],[37.569012,126.976642],[37.569005,126.976789],[37.568976,126.976972]]},{"link_id":"1000004201","road_name":"세종대로21길","start":"속성변화점","end":"청계광장","dist_m":71.0,"speed_kmh":10.0,"congestion":"정체","coords":[[37.569087,126.976968],[37.569112,126.976806],[37.56912,126.976648],[37.569125,126.976276],[37.569145,126.97617]]},{"link_id":"1000004202","road_name":"세종대로21길","start":"조선일보본사","end":"속성변화점","dist_m":44.0,"speed_kmh":30.0,"congestion":"원활","coords":[[37.569145,126.97617],[37.569302,126.975965],[37.569349,126.975917],[37.569443,126.975854]]},{"link_id":"1000004203","road_name":"세종대로21길","start":"신문로1가141","end":"조선일보본사","dist_m":67.0,"speed_kmh":15.5,"congestion":"서행","coords":[[37.569522,126.975823],[37.570111,126.975666]]},{"link_id":"1000005000","road_name":"무교로","start":"종로구청입구교차로","end":"무교동사거리","dist_m":98.0,"speed_kmh":24.0,"congestion":"서행","coords":[[37.569267,126.979344],[37.570149,126.979381]]},{"link_id":"1000005101","road_name":"세종대로","start":"청계광장","end":"세종로1-80","dist_m":55.0,"speed_kmh":39.0,"congestion":"원활","coords":[[37.569582,126.976953],[37.569421,126.976956],[37.569087,126.976968]]},{"link_id":"1000005102","road_name":"세종대로","start":"세종로1-80","end":"세종대로사거리","dist_m":60.0,"speed_kmh":18.0,"congestion":"서행","coords":[[37.570121,126.97696],[37.569776,126.976953],[37.569582,126.976953]]},{"link_id":"1000005202","road_name":"세종대로","start":"세종대로사거리","end":"청계천광장","dist_m":60.0,"speed_kmh":6.0,"congestion":"정체","coords":[[37.569583,126.977089],[37.569776,126.977089],[37.570123,126.977096]]},{"link_id":"1000005203","road_name":"세종대로","start":"청계광장","end":"청계광장","dist_m":43.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.569031,126.977106],[37.569416,126.977092]]},{"link_id":"1000005204","road_name":"세종대로","start":"청계천광장","end":"청계광장","dist_m":19.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.569416,126.977092],[37.569583,126.977089]]},{"link_id":"1000006701","road_name":"종로3길","start":"KT광화문빌딩East","end":"종로구청앞교차로","dist_m":123.0,"speed_kmh":17.5,"congestion":"서행","coords":[[37.572417,126.979185],[37.572289,126.979213],[37.571308,126.979237]]},{"link_id":"1000006702","road_name":"종로3길","start":"종로구청입구교차로","end":"KT광화문빌딩East","dist_m":105.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.5712,126.979239],[37.570501,126.979256],[37.570256,126.979248]]},{"link_id":"1000006801","road_name":"종로3길","start":"KT광화문빌딩East","end":"종로구청입구교차로","dist_m":105.0,"speed_kmh":28.0,"congestion":"원활","coords":[[37.570258,126.979384],[37.570501,126.979392],[37.571202,126.979375]]},{"link_id":"1000006802","road_name":"종로3길","start":"종로구청앞교차로","end":"KT광화문빌딩East","dist_m":124.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.57131,126.979372],[37.572299,126.979348],[37.572421,126.979322]]},{"link_id":"1000007301","road_name":"새문안로5길","start":"당주동 42-1","end":"당주동 42-1","dist_m":23.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.571577,126.974771],[37.571527,126.974776],[37.571374,126.974795]]},{"link_id":"1000007303","road_name":"새문안로5길","start":"국토매일신문","end":"정부중앙청사별관","dist_m":110.0,"speed_kmh":31.0,"congestion":"원활","coords":[[37.57405,126.974411],[37.573769,126.97445],[37.573658,126.974463],[37.573063,126.974534]]},{"link_id":"1000007304","road_name":"새문안로5길","start":"당주동 9-1","end":"국토매일신문","dist_m":85.0,"speed_kmh":13.0,"congestion":"정체","coords":[[37.572955,126.974547],[37.572387,126.974615],[37.572201,126.97469]]},{"link_id":"1000007401","road_name":"새문안로5길","start":"당주동 37-5","end":"뉴질랜드관광청","dist_m":69.0,"speed_kmh":12.0,"congestion":"정체","coords":[[37.570213,126.975053],[37.570419,126.975044],[37.57071,126.97501],[37.570835,126.974995]]},{"link_id":"1000007403","road_name":"새문안로5길","start":"국토매일신문","end":"당주동 15-5","dist_m":143.0,"speed_kmh":7.0,"congestion":"정체","coords":[[37.571693,126.974896],[37.572148,126.974854],[37.572233,126.97482],[37.572409,126.974749],[37.572965,126.974683]]},{"link_id":"1000007404","road_name":"새문안로5길","start":"정부중앙청사별관","end":"국토매일신문","dist_m":110.0,"speed_kmh":5.0,"congestion":"정체","coords":[[37.573074,126.97467],[37.573668,126.974598],[37.57378,126.974585],[37.574056,126.974547]]},{"link_id":"1000007501","road_name":"삼봉로","start":"신라스테이(광화문)","end":"종로구청앞교차로","dist_m":63.0,"speed_kmh":16.7,"congestion":"서행","coords":[[37.572421,126.979322],[37.572464,126.979952],[37.572456,126.980003],[37.572446,126.980032]]},{"link_id":"1000007502","road_name":"삼봉로","start":"조계사앞교차로","end":"신라스테이(광화문)","dist_m":252.0,"speed_kmh":14.0,"congestion":"정체","coords":[[37.572405,126.980181],[37.572332,126.980491],[37.572188,126.981105],[37.572031,126.982254],[37.571985,126.982718],[37.571978,126.982971]]},{"link_id":"1000007601","road_name":"삼봉로","start":"종로구청앞교차로","end":"신라스테이(광화문)","dist_m":69.0,"speed_kmh":19.0,"congestion":"서행","coords":[[37.572546,126.980085],[37.572559,126.980043],[37.572574,126.97996],[37.572528,126.97931]]},{"link_id":"1000008305","road_name":"사직로8길","start":"세종로공원","end":"광화문","dist_m":47.0,"speed_kmh":32.0,"congestion":"원활","coords":[[37.574783,126.976353],[37.574362,126.97633]]},{"link_id":"1000008306","road_name":"사직로8길","start":"세종로공원","end":"세종로공원","dist_m":24.0,"speed_kmh":16.5,"congestion":"서행","coords":[[37.574362,126.97633],[37.574148,126.976365]]},{"link_id":"1000008403","road_name":"세종대로","start":"세종로 84-12","end":"주한네덜란드대사관","dist_m":86.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.570862,126.977321],[37.571635,126.977344]]},{"link_id":"1000008404","road_name":"세종대로","start":"대한민국역사박물관","end":"미국대사관","dist_m":161.0,"speed_kmh":12.0,"congestion":"정체","coords":[[37.572786,126.977313],[37.574239,126.977267]]},{"link_id":"1000008405","road_name":"세종대로","start":"대한민국역사박물관","end":"대한민국역사박물관","dist_m":24.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.574239,126.977267],[37.574455,126.977257]]},{"link_id":"1000008406","road_name":"세종대로","start":"미국대사관","end":"미국대사관","dist_m":12.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.572678,126.977316],[37.572786,126.977313]]},{"link_id":"1000008501","road_name":"삼봉로","start":"주한미국대사관","end":"종로구청앞교차로","dist_m":48.0,"speed_kmh":19.0,"congestion":"서행","coords":[[37.572525,126.979189],[37.572529,126.97905],[37.572553,126.978923],[37.572634,126.978673]]},{"link_id":"1000008502","road_name":"종로1길","start":"정부합동민원실","end":"주한미국대사관","dist_m":180.0,"speed_kmh":22.0,"congestion":"서행","coords":[[37.572692,126.978629],[37.572808,126.978627],[37.574309,126.978582]]},{"link_id":"1000008601","road_name":"삼봉로","start":"종로구청앞교차로","end":"주한미국대사관","dist_m":51.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.57253,126.978636],[37.57245,126.978881],[37.572421,126.979032],[37.572417,126.979185]]},{"link_id":"1000008602","road_name":"종로1길","start":"주한미국대사관","end":"정부합동민원실","dist_m":181.0,"speed_kmh":23.0,"congestion":"서행","coords":[[37.574323,126.978446],[37.572806,126.978491],[37.572697,126.978493]]},{"link_id":"1000009102","road_name":"우정국로","start":"안국동사거리","end":"안국동로터리","dist_m":63.0,"speed_kmh":13.0,"congestion":"정체","coords":[[37.575545,126.982908],[37.575401,126.98285],[37.575236,126.982816],[37.575053,126.9828],[37.574985,126.982804]]},{"link_id":"1000009300","road_name":"사직로8길","start":"스타트경제","end":"정부중앙청사별관","dist_m":81.0,"speed_kmh":27.0,"congestion":"원활","coords":[[37.574158,126.9744],[37.574127,126.973488]]},{"link_id":"1000009400","road_name":"사직로8길","start":"정부중앙청사별관","end":"스타트경제","dist_m":81.0,"speed_kmh":32.0,"congestion":"원활","coords":[[37.574019,126.973494],[37.57405,126.974411]]},{"link_id":"1000009700","road_name":"종로5길","start":"정부합동민원실","end":"서울지방국세청","dist_m":57.0,"speed_kmh":24.0,"congestion":"서행","coords":[[37.57441,126.979273],[37.57446,126.978626]]},{"link_id":"1000009800","road_name":"종로5길","start":"서울지방국세청","end":"정부합동민원실","dist_m":55.0,"speed_kmh":31.0,"congestion":"원활","coords":[[37.57435,126.978639],[37.574302,126.979259]]},{"link_id":"1000009901","road_name":"사직로8길","start":"정부중앙청사별관","end":"중앙지하차도(서측)","dist_m":95.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.574218,126.975612],[37.574163,126.974536]]},{"link_id":"1000009902","road_name":"사직로8길","start":"중앙지하차도(서측)","end":"세종로공원","dist_m":66.0,"speed_kmh":30.0,"congestion":"원활","coords":[[37.574362,126.97633],[37.574305,126.975871],[37.574218,126.975612]]},{"link_id":"1000009903","road_name":"사직로8길","start":"대한민국역사박물관","end":"중앙지하차도(동측)","dist_m":69.0,"speed_kmh":4.0,"congestion":"정체","coords":[[37.574449,126.978031],[37.574486,126.977753],[37.574457,126.977277],[37.574455,126.977257]]},{"link_id":"1000009904","road_name":"사직로8길","start":"중앙지하차도(동측)","end":"정부합동민원실","dist_m":37.0,"speed_kmh":26.0,"congestion":"원활","coords":[[37.574466,126.978446],[37.574449,126.978031]]},{"link_id":"1000010001","road_name":"사직로8길","start":"중앙지하차도(서측)","end":"정부중앙청사별관","dist_m":95.0,"speed_kmh":32.7,"congestion":"원활","coords":[[37.574056,126.974547],[37.57411,126.975625]]},{"link_id":"1000010002","road_name":"사직로8길","start":"세종로공원","end":"중앙지하차도(서측)","dist_m":66.0,"speed_kmh":21.3,"congestion":"서행","coords":[[37.57411,126.975625],[37.574091,126.975908],[37.574148,126.976365]]},{"link_id":"1000010003","road_name":"사직로8길","start":"중앙지하차도(동측)","end":"대한민국역사박물관","dist_m":70.0,"speed_kmh":16.0,"congestion":"서행","coords":[[37.574239,126.977267],[37.574242,126.977301],[37.574271,126.977774],[37.574341,126.978039]]},{"link_id":"1000010004","road_name":"사직로8길","start":"정부합동민원실","end":"중앙지하차도(동측)","dist_m":34.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.574341,126.978039],[37.574357,126.978427]]},{"link_id":"1000010600","road_name":"새문안로5길","start":"정부서울청사사거리","end":"정부중앙청사별관","dist_m":171.0,"speed_kmh":7.0,"congestion":"정체","coords":[[37.574163,126.974536],[37.574318,126.974525],[37.575495,126.974388],[37.575577,126.974388],[37.575699,126.974396]]},{"link_id":"1000011101","road_name":"종로1길","start":"세종로 23-3","end":"경복궁사거리","dist_m":57.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.575556,126.979199],[37.575433,126.979128],[37.575376,126.979084],[37.575115,126.978863]]},{"link_id":"1000011102","road_name":"종로1길","start":"경복궁사거리","end":"경복궁사거리","dist_m":27.0,"speed_kmh":26.0,"congestion":"원활","coords":[[37.575781,126.979311],[37.575556,126.979199]]},{"link_id":"1000011201","road_name":"종로1길","start":"경복궁","end":"정부합동민원실","dist_m":116.0,"speed_kmh":8.0,"congestion":"정체","coords":[[37.574476,126.978593],[37.574526,126.978603],[37.574649,126.97866],[37.574741,126.978716],[37.574915,126.978857],[37.575055,126.978975],[37.575318,126.979198],[37.575379,126.979246]]},{"link_id":"1000011202","road_name":"종로1길","start":"경복궁사거리","end":"경복궁","dist_m":52.0,"speed_kmh":4.0,"congestion":"정체","coords":[[37.575379,126.979246],[37.575468,126.979301],[37.575808,126.97947]]},{"link_id":"1000011501","road_name":"율곡로","start":"경복궁","end":"경복궁사거리","dist_m":60.0,"speed_kmh":40.0,"congestion":"원활","coords":[[37.575808,126.97947],[37.575856,126.979734],[37.575879,126.979973],[37.575881,126.980138]]},{"link_id":"1000011502","road_name":"율곡로","start":"주한멕시코대사관","end":"경복궁","dist_m":94.0,"speed_kmh":39.0,"congestion":"원활","coords":[[37.575881,126.980138],[37.575881,126.980146],[37.57587,126.980327],[37.575738,126.98118]]},{"link_id":"1000011503","road_name":"율곡로","start":"안국동사거리","end":"주한멕시코대사관","dist_m":63.0,"speed_kmh":29.0,"congestion":"원활","coords":[[37.575715,126.981333],[37.575605,126.982037]]},{"link_id":"1000011504","road_name":"율곡로","start":"안국동로터리","end":"안국동사거리","dist_m":78.0,"speed_kmh":19.0,"congestion":"서행","coords":[[37.575605,126.982037],[37.575582,126.982185],[37.575556,126.982395],[37.575541,126.982595],[37.575541,126.982773],[37.575545,126.982908]]},{"link_id":"1000011601","road_name":"율곡로","start":"경복궁사거리","end":"경복궁","dist_m":55.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.575989,126.980121],[37.575987,126.979964],[37.575963,126.979711],[37.575926,126.979507]]},{"link_id":"1000011603","road_name":"율곡로","start":"경복궁","end":"안국동로터리","dist_m":252.0,"speed_kmh":21.0,"congestion":"서행","coords":[[37.575656,126.982935],[37.575654,126.982913],[37.575649,126.98277],[37.575649,126.982601],[37.575663,126.982412],[37.575689,126.982209],[37.575711,126.982063],[37.575821,126.981359],[37.575844,126.981206],[37.575977,126.980346],[37.57599,126.98015],[37.575989,126.980121]]},{"link_id":"1000011700","road_name":"사직로","start":"정부서울청사사거리","end":"경복궁역사거리","dist_m":138.0,"speed_kmh":23.7,"congestion":"서행","coords":[[37.575842,126.972709],[37.575823,126.972939],[37.575785,126.973379],[37.57571,126.97426]]},{"link_id":"1000011800","road_name":"사직로","start":"적선동 8-1","end":"정부서울청사사거리","dist_m":77.0,"speed_kmh":23.0,"congestion":"서행","coords":[[37.575819,126.974259],[37.575893,126.973394]]},{"link_id":"1000012001","road_name":"사직로","start":"광화문","end":"정부서울청사사거리","dist_m":109.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.575699,126.974396],[37.575618,126.975481],[37.575594,126.975625]]},{"link_id":"1000012101","road_name":"사직로","start":"광화문삼거리","end":"경복궁","dist_m":142.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.575795,126.978628],[37.575727,126.978049],[37.575669,126.977805],[37.57556,126.977584],[37.575371,126.977339],[37.575323,126.977267],[37.575296,126.977203]]},{"link_id":"1000012102","road_name":"사직로","start":"경복궁","end":"경복궁사거리","dist_m":66.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.5759,126.979362],[37.575865,126.979144],[37.575795,126.978628]]},{"link_id":"1000012201","road_name":"사직로","start":"광화문","end":"광화문삼거리","dist_m":79.0,"speed_kmh":37.0,"congestion":"원활","coords":[[37.575203,126.977211],[37.575234,126.977293],[37.575279,126.977394],[37.575473,126.97766],[37.575575,126.977851],[37.575605,126.977945]]},{"link_id":"1000012202","road_name":"사직로","start":"경복궁","end":"광화문","dist_m":63.0,"speed_kmh":39.0,"congestion":"원활","coords":[[37.575605,126.977945],[37.575688,126.978648]]},{"link_id":"1000012203","road_name":"사직로","start":"경복궁사거리","end":"경복궁","dist_m":59.0,"speed_kmh":26.0,"congestion":"원활","coords":[[37.575688,126.978648],[37.575758,126.979169],[37.575781,126.979311]]},{"link_id":"1000012800","road_name":"율곡로","start":"관훈동 113","end":"안국동로터리","dist_m":108.0,"speed_kmh":14.0,"congestion":"정체","coords":[[37.575574,126.983165],[37.57558,126.983216],[37.575617,126.983421],[37.575698,126.983682],[37.575907,126.984247],[37.575932,126.984301]]},{"link_id":"1000013802","road_name":"율곡로3길","start":"안국동 177-3","end":"안국동로터리","dist_m":188.0,"speed_kmh":12.0,"congestion":"정체","coords":[[37.575672,126.98307],[37.575914,126.983056],[37.576026,126.983033],[37.576834,126.982649],[37.576995,126.982615],[37.5773,126.982578]]},{"link_id":"1000014301","road_name":"삼청로","start":"경복궁사거리","end":"대한출판문화협회","dist_m":73.0,"speed_kmh":13.0,"congestion":"정체","coords":[[37.576554,126.979469],[37.576482,126.979467],[37.576125,126.979417],[37.5759,126.979362]]},{"link_id":"1000014302","road_name":"삼청로","start":"대한출판문화협회","end":"국군서울지구병원","dist_m":388.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.580022,126.979856],[37.579326,126.979618],[37.57914,126.979567],[37.579038,126.979548],[37.578873,126.979533],[37.578028,126.979497],[37.576554,126.979469]]},{"link_id":"1000014401","road_name":"삼청로","start":"대한출판문화협회","end":"경복궁사거리","dist_m":70.0,"speed_kmh":28.0,"congestion":"원활","coords":[[37.575926,126.979507],[37.576109,126.979552],[37.576476,126.979603],[37.576553,126.979605]]},{"link_id":"1000014402","road_name":"삼청로","start":"국군서울지구병원","end":"대한출판문화협회","dist_m":385.0,"speed_kmh":28.0,"congestion":"원활","coords":[[37.576553,126.979605],[37.578025,126.979633],[37.578867,126.979668],[37.579026,126.979683],[37.57912,126.9797],[37.579301,126.97975],[37.579994,126.979987]]},{"link_id":"1000032200","road_name":"사직로8길","start":"중앙지하차도(서측)","end":"중앙지하차도(동측)","dist_m":215.0,"speed_kmh":27.3,"congestion":"원활","coords":[[37.574449,126.978031],[37.574403,126.977283],[37.574395,126.977176],[37.574325,126.976602],[37.574281,126.976177],[37.574218,126.975612]]},{"link_id":"1000015201","road_name":"효자로","start":"한글전각갤러리","end":"정부서울청사사거리","dist_m":396.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.575807,126.974396],[37.576076,126.974376],[37.576478,126.974309],[37.577301,126.974172],[37.577538,126.974127],[37.577884,126.974061],[37.578283,126.974018],[37.57935,126.973902]]},{"link_id":"1000023500","road_name":"종로","start":"동아일보사","end":"광화문우체국","dist_m":91.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.570141,126.978435],[37.569322,126.978346]]},{"link_id":"1000023800","road_name":"세종대로","start":"세종로1-80","end":"주한요르단명예영사관","dist_m":93.0,"speed_kmh":16.0,"congestion":"서행","coords":[[37.570115,126.976202],[37.570025,126.976516],[37.569974,126.976595],[37.569882,126.976719],[37.569776,126.976823],[37.569646,126.976944],[37.569582,126.976953]]},{"link_id":"1000023900","road_name":"종로","start":"동아일보사","end":"청계천광장","dist_m":91.0,"speed_kmh":9.5,"congestion":"정체","coords":[[37.569583,126.977089],[37.569648,126.977096],[37.569774,126.977209],[37.569939,126.977346],[37.570053,126.977474],[37.570106,126.977572],[37.570134,126.977759]]},{"link_id":"1000025901","road_name":"종로5길","start":"GS건설본사","end":"신라스테이(광화문)","dist_m":128.0,"speed_kmh":22.0,"congestion":"서행","coords":[[37.572399,126.980102],[37.572362,126.980127],[37.57225,126.980188],[37.571716,126.980458],[37.571681,126.980474],[37.571323,126.980637]]},{"link_id":"1000026600","road_name":"세종대로23길","start":"당주동 5-2","end":"당주동 50","dist_m":77.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.571685,126.974761],[37.571691,126.974138],[37.571693,126.973888]]},{"link_id":"1000029000","road_name":"삼봉로","start":"주한미국대사관","end":"미국대사관","dist_m":102.0,"speed_kmh":31.0,"congestion":"원활","coords":[[37.572678,126.977316],[37.572682,126.978251],[37.572666,126.978313],[37.572603,126.978447]]},{"link_id":"1000029100","road_name":"삼봉로","start":"미국대사관","end":"주한미국대사관","dist_m":108.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.572702,126.978503],[37.572765,126.978369],[37.57279,126.978273],[37.572786,126.977313]]},{"link_id":"1000030300","road_name":"종로5길","start":"신라스테이(광화문)","end":"서울지방국세청","dist_m":212.0,"speed_kmh":22.5,"congestion":"서행","coords":[[37.574302,126.979259],[37.574187,126.979276],[37.573346,126.979726],[37.572808,126.979922],[37.572536,126.98001],[37.572503,126.980032]]},{"link_id":"1000030400","road_name":"종로5길","start":"서울지방국세청","end":"신라스테이(광화문)","dist_m":208.0,"speed_kmh":23.0,"congestion":"서행","coords":[[37.572548,126.980156],[37.572575,126.980137],[37.572837,126.980053],[37.573382,126.979855],[37.574215,126.979409],[37.574313,126.979395]]},{"link_id":"1000031700","road_name":"인사동길","start":"관훈동 177-1","end":"안국동로터리","dist_m":209.0,"speed_kmh":18.0,"congestion":"서행","coords":[[37.575517,126.983039],[37.575372,126.983258],[37.57528,126.983383],[37.575276,126.983387],[37.574827,126.983814],[37.574633,126.983998],[37.574628,126.984003],[37.574452,126.984193],[37.574349,126.984326],[37.5743,126.984394],[37.574135,126.984625]]},{"link_id":"1000032100","road_name":"사직로8길","start":"중앙지하차도(동측)","end":"중앙지하차도(서측)","dist_m":215.0,"speed_kmh":29.0,"congestion":"원활","coords":[[37.57411,126.975625],[37.574174,126.976196],[37.574218,126.976622],[37.574287,126.977193],[37.574296,126.977295],[37.574341,126.978039]]},{"link_id":"1010005904","road_name":"세종대로","start":"소공동주민센터","end":"시청앞광장","dist_m":153.0,"speed_kmh":24.0,"congestion":"서행","coords":[[37.563972,126.976832],[37.563073,126.976492],[37.562658,126.976321]]},{"link_id":"1000032700","road_name":"율곡로2길","start":"수송동 85","end":"서울지방국세청","dist_m":170.0,"speed_kmh":17.5,"congestion":"서행","coords":[[37.574313,126.979395],[37.574325,126.979441],[37.574361,126.979522],[37.57477,126.980068],[37.57532,126.980844]]},{"link_id":"1000032800","road_name":"율곡로2길","start":"서울지방국세청","end":"주한멕시코대사관","dist_m":219.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.575738,126.98118],[37.575597,126.98103],[37.5754,126.980753],[37.574849,126.979977],[37.574449,126.979441],[37.574424,126.979387],[37.574417,126.979355]]},{"link_id":"1000033500","road_name":"사직로8길","start":"광화문","end":"광화문","dist_m":120.0,"speed_kmh":18.5,"congestion":"서행","coords":[[37.575594,126.975625],[37.575562,126.975722],[37.57549,126.97585],[37.575356,126.976051],[37.575271,126.976175],[37.5752,126.976252],[37.575137,126.976308],[37.575089,126.976338],[37.574997,126.976359],[37.574783,126.976353]]},{"link_id":"1000033900","road_name":"우정국로","start":"안국동사거리","end":"안국동사거리","dist_m":102.0,"speed_kmh":22.0,"congestion":"서행","coords":[[37.575605,126.982037],[37.57551,126.982294],[37.575197,126.982743],[37.575054,126.982791],[37.574985,126.982804]]},{"link_id":"1000034600","road_name":"종로1길","start":"경복궁사거리","end":"경복궁","dist_m":52.0,"speed_kmh":22.0,"congestion":"서행","coords":[[37.575688,126.978648],[37.575656,126.978886],[37.575615,126.97906],[37.575592,126.979144],[37.575565,126.979195],[37.575556,126.979199]]},{"link_id":"1000034900","road_name":"율곡로","start":"경복궁","end":"경복궁","dist_m":101.0,"speed_kmh":27.0,"congestion":"원활","coords":[[37.575379,126.979246],[37.575495,126.979336],[37.575599,126.979432],[37.575659,126.979507],[37.575735,126.979627],[37.575815,126.979788],[37.575881,126.980138]]},{"link_id":"1000035200","road_name":"사직로","start":"경복궁","end":"대한출판문화협회","dist_m":118.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.576554,126.979469],[37.57641,126.979437],[37.576164,126.979196],[37.575918,126.978975],[37.575854,126.978869],[37.575795,126.978628]]},{"link_id":"1000035300","road_name":"삼청로","start":"대한출판문화협회","end":"경복궁","dist_m":93.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.575989,126.980121],[37.576078,126.97973],[37.576114,126.97966],[37.57618,126.979604],[37.576553,126.979605]]},{"link_id":"1000046300","road_name":"새문안로2길","start":"LG생활건강본사","end":"덕수초교앞","dist_m":140.0,"speed_kmh":14.0,"congestion":"정체","coords":[[37.569475,126.974241],[37.569467,126.9737],[37.569475,126.973226],[37.569475,126.973225],[37.569475,126.972656]]},{"link_id":"1000046400","road_name":"새문안로2길","start":"덕수초교앞","end":"LG생활건강본사","dist_m":138.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.569367,126.972655],[37.569367,126.973224],[37.569359,126.973698],[37.569359,126.9737],[37.569367,126.974212]]},{"link_id":"1000046500","road_name":"종로3길","start":"KT광화문빌딩East","end":"GS건설본사","dist_m":112.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.571323,126.980637],[37.57131,126.979372]]},{"link_id":"1000046600","road_name":"종로3길","start":"GS건설본사","end":"KT광화문빌딩East","dist_m":116.0,"speed_kmh":20.0,"congestion":"서행","coords":[[37.571202,126.979375],[37.571215,126.980685]]},{"link_id":"1000046900","road_name":"새문안로5길","start":"국토매일신문","end":"세종문화회관","dist_m":105.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.573121,126.975825],[37.573081,126.975782],[37.573058,126.975722],[37.573074,126.97467]]},{"link_id":"1010006002","road_name":"세종대로","start":"시청앞광장","end":"숭례문","dist_m":346.0,"speed_kmh":24.0,"congestion":"서행","coords":[[37.560981,126.975822],[37.561794,126.976113],[37.561894,126.976151],[37.562522,126.976408],[37.562625,126.976451],[37.563041,126.976621],[37.563957,126.976969]]},{"link_id":"1010007305","road_name":"서소문로","start":"서소문동 42-3","end":"시청앞광장","dist_m":191.0,"speed_kmh":14.0,"congestion":"정체","coords":[[37.564078,126.976873],[37.564086,126.976679],[37.564075,126.976552],[37.564025,126.97634],[37.563516,126.974992],[37.563475,126.974881]]},{"link_id":"1010007405","road_name":"서소문로","start":"시청앞광장","end":"중앙일보사","dist_m":249.0,"speed_kmh":21.0,"congestion":"서행","coords":[[37.563124,126.97425],[37.563377,126.974938],[37.563418,126.975049],[37.563924,126.976389],[37.563969,126.976579],[37.563978,126.976683],[37.563972,126.976832]]},{"link_id":"1010007500","road_name":"소공로","start":"한국은행앞교차로","end":"소공로지하상가","dist_m":271.0,"speed_kmh":9.5,"congestion":"정체","coords":[[37.563905,126.979374],[37.563323,126.979926],[37.562735,126.980461],[37.562147,126.980996],[37.561922,126.981156]]},{"link_id":"1010008401","road_name":"세종대로18길","start":"우성빌딩","end":"시청앞광장","dist_m":68.0,"speed_kmh":27.0,"congestion":"원활","coords":[[37.563957,126.976969],[37.56381,126.977719]]},{"link_id":"1010008402","road_name":"세종대로18길","start":"소공동 87-15","end":"우성빌딩","dist_m":58.0,"speed_kmh":13.0,"congestion":"정체","coords":[[37.563783,126.977844],[37.563763,126.977925],[37.563751,126.978055],[37.563759,126.978165],[37.563801,126.978495]]},{"link_id":"1010009100","road_name":"남대문로7길","start":"호텔이비스명동","end":"소공로지하상가","dist_m":227.0,"speed_kmh":8.0,"congestion":"정체","coords":[[37.563901,126.979548],[37.563895,126.97968],[37.56399,126.980631],[37.563666,126.982052]]},{"link_id":"1010009200","road_name":"남대문로7길","start":"소공로지하상가","end":"호텔이비스명동","dist_m":240.0,"speed_kmh":11.0,"congestion":"정체","coords":[[37.563771,126.982087],[37.5641,126.980642],[37.564003,126.979676],[37.564014,126.97944]]},{"link_id":"1010009501","road_name":"소공로","start":"소공로지하상가","end":"조선호텔","dist_m":69.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.564503,126.978815],[37.564006,126.979279]]},{"link_id":"1010009502","road_name":"소공로","start":"조선호텔","end":"시청앞광장","dist_m":44.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.564927,126.978467],[37.564826,126.978533],[37.564723,126.97861],[37.564593,126.978731]]},{"link_id":"1010009601","road_name":"소공로","start":"조선호텔","end":"소공로지하상가","dist_m":76.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.564014,126.97944],[37.564567,126.978924]]},{"link_id":"1010009602","road_name":"소공로","start":"속성변화점","end":"조선호텔","dist_m":47.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.564658,126.97884],[37.564783,126.978723],[37.564878,126.978652],[37.564914,126.978629],[37.565024,126.978606]]},{"link_id":"1010009902","road_name":"세종대로","start":"시청앞광장","end":"시청앞교차로","dist_m":85.0,"speed_kmh":23.0,"congestion":"서행","coords":[[37.56482,126.977088],[37.564663,126.977059],[37.564435,126.977],[37.564209,126.976922],[37.564078,126.976873]]},{"link_id":"1010010000","road_name":"세종대로","start":"시청앞교차로","end":"시청앞광장","dist_m":79.0,"speed_kmh":24.0,"congestion":"서행","coords":[[37.564061,126.977008],[37.564179,126.977053],[37.56441,126.977132],[37.564644,126.977193],[37.564756,126.977214]]},{"link_id":"1010011000","road_name":"덕수궁길","start":"국립현대미술관(덕수궁)","end":"시청앞교차로","dist_m":350.0,"speed_kmh":21.0,"congestion":"서행","coords":[[37.564968,126.977111],[37.5649,126.976996],[37.564884,126.976919],[37.564966,126.976264],[37.564977,126.976174],[37.565001,126.975978],[37.565005,126.975869],[37.564955,126.975201],[37.564948,126.975138],[37.564852,126.974301],[37.564841,126.974098],[37.564843,126.974052],[37.564857,126.974023],[37.565245,126.973684],[37.565304,126.97355],[37.56531,126.97348]]},{"link_id":"1010011100","road_name":"소공로","start":"시청앞광장","end":"시청앞교차로","dist_m":106.0,"speed_kmh":24.0,"congestion":"서행","coords":[[37.564902,126.977271],[37.564928,126.97741],[37.564943,126.977627],[37.564939,126.978325],[37.564927,126.978467]]},{"link_id":"1010011200","road_name":"소공로","start":"시청앞교차로","end":"시청앞광장","dist_m":108.0,"speed_kmh":13.0,"congestion":"정체","coords":[[37.565036,126.978466],[37.565047,126.978332],[37.565051,126.977622],[37.565035,126.977388],[37.565009,126.977252]]},{"link_id":"1010012500","road_name":"을지로","start":"시청앞광장","end":"시청앞교차로","dist_m":114.0,"speed_kmh":10.0,"congestion":"정체","coords":[[37.565984,126.978971],[37.565832,126.978868],[37.565421,126.97865],[37.565036,126.978466]]},{"link_id":"1010012600","road_name":"을지로","start":"시청앞교차로","end":"속성변화점","dist_m":110.0,"speed_kmh":13.0,"congestion":"정체","coords":[[37.565024,126.978606],[37.565381,126.978776],[37.565785,126.97899],[37.565933,126.97909]]},{"link_id":"1010013800","road_name":"세종대로","start":"강원도민일보(서울본부)","end":"시청앞교차로","dist_m":221.0,"speed_kmh":34.0,"congestion":"원활","coords":[[37.565009,126.977252],[37.565121,126.977263],[37.565267,126.97727],[37.565408,126.977268],[37.565643,126.977256],[37.567001,126.977198]]},{"link_id":"1010013901","road_name":"을지로","start":"시청앞교차로","end":"일본국제관광진흥기구서울사무소","dist_m":43.0,"speed_kmh":14.0,"congestion":"정체","coords":[[37.566065,126.979619],[37.566043,126.979136]]},{"link_id":"1010014001","road_name":"을지로","start":"을지로1가 50-1","end":"시청앞교차로","dist_m":127.0,"speed_kmh":21.0,"congestion":"서행","coords":[[37.565933,126.97909],[37.565957,126.979627],[37.56596,126.979757],[37.565969,126.980525]]},{"link_id":"1010015200","road_name":"정동길","start":"정동 6-1","end":"국립현대미술관(덕수궁)","dist_m":86.0,"speed_kmh":25.0,"congestion":"원활","coords":[[37.565322,126.973417],[37.565441,126.973182],[37.565782,126.97263]]},{"link_id":"1010015400","road_name":"무교로","start":"한국체육박물관","end":"시청앞교차로","dist_m":99.0,"speed_kmh":19.0,"congestion":"서행","coords":[[37.566043,126.979136],[37.566277,126.979205],[37.56649,126.979245],[37.56693,126.979264]]},{"link_id":"1010016400","road_name":"세종대로20길","start":"태평로1가 31-1","end":"한국체육박물관","dist_m":86.0,"speed_kmh":8.0,"congestion":"정체","coords":[[37.567043,126.979133],[37.567066,126.979002],[37.567078,126.978857],[37.567116,126.978393],[37.567115,126.978161]]},{"link_id":"1010017601","road_name":"무교로","start":"무교동 44-1","end":"한국체육박물관","dist_m":103.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.56704,126.979269],[37.567528,126.979288],[37.567571,126.97929],[37.567969,126.97931]]},{"link_id":"1010017602","road_name":"무교로","start":"무교동사거리","end":"무교동사거리","dist_m":33.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.568972,126.979361],[37.569267,126.979344]]},{"link_id":"1010017701","road_name":"덕수궁길","start":"국립현대미술관(덕수궁)","end":"덕수초교앞","dist_m":470.0,"speed_kmh":15.0,"congestion":"서행","coords":[[37.569292,126.974264],[37.569232,126.974261],[37.568812,126.974181],[37.568751,126.974171],[37.568707,126.97415],[37.56775,126.973333],[37.567643,126.97326],[37.567564,126.973214],[37.567545,126.973211],[37.567487,126.973203],[37.567383,126.973207],[37.566992,126.973295],[37.566647,126.973416],[37.566546,126.97343],[37.566264,126.973435],[37.565382,126.973432],[37.565352,126.973429],[37.565336,126.973421],[37.565322,126.973397]]},{"link_id":"1010017702","road_name":"덕수궁길","start":"덕수초교앞","end":"신문로1가 5-4","dist_m":67.0,"speed_kmh":7.0,"congestion":"정체","coords":[[37.570101,126.974371],[37.56953,126.974271],[37.569502,126.974271]]},{"link_id":"1010017801","road_name":"덕수궁길","start":"정동 1-36","end":"국립현대미술관(덕수궁)","dist_m":255.0,"speed_kmh":16.0,"congestion":"서행","coords":[[37.565261,126.973522],[37.565268,126.973532],[37.565326,126.973563],[37.565379,126.973568],[37.566265,126.973571],[37.566552,126.973565],[37.566668,126.97355],[37.567016,126.973427],[37.567394,126.973342],[37.567482,126.973339],[37.567533,126.973346]]},{"link_id":"1010017802","road_name":"덕수궁길","start":"신문로1가 5-4","end":"덕수초교앞","dist_m":67.0,"speed_kmh":18.0,"congestion":"서행","coords":[[37.569504,126.974407],[37.569522,126.974407],[37.570101,126.974508]]},{"link_id":"1010018100","road_name":"세종대로","start":"시청앞교차로","end":"청계광장","dist_m":445.0,"speed_kmh":22.0,"congestion":"서행","coords":[[37.568976,126.976972],[37.567506,126.977036],[37.567105,126.977057],[37.566997,126.977062],[37.565639,126.97712],[37.565405,126.977132],[37.565268,126.977135],[37.565128,126.977128],[37.564968,126.977111]]},{"link_id":"1010018200","road_name":"세종대로","start":"청계광장","end":"강원도민일보(서울본부)","dist_m":213.0,"speed_kmh":36.0,"congestion":"원활","coords":[[37.567109,126.977193],[37.567511,126.977172],[37.569031,126.977106]]},{"link_id":"1010037000","road_name":"남대문로1길","start":"서울프라자호텔","end":"우성빌딩","dist_m":62.0,"speed_kmh":1.0,"congestion":"정체","coords":[[37.563886,126.977883],[37.564415,126.978127]]},{"link_id":"1010037100","road_name":"남대문로1길","start":"우성빌딩","end":"서울프라자호텔","dist_m":61.0,"speed_kmh":8.0,"congestion":"정체","coords":[[37.564435,126.977992],[37.563915,126.977752]]},{"link_id":"1010037700","road_name":"서소문로11길","start":"정동 34-31","end":"국립현대미술관(덕수궁)","dist_m":97.0,"speed_kmh":19.0,"congestion":"서행","coords":[[37.565275,126.973303],[37.565191,126.973115],[37.565113,126.972798],[37.565046,126.972729],[37.564959,126.972729],[37.564784,126.97278],[37.564704,126.972795]]},{"link_id":"1010038300","road_name":"소공로","start":"서울프라자호텔","end":"조선호텔","dist_m":50.0,"speed_kmh":12.0,"congestion":"정체","coords":[[37.564593,126.978731],[37.564552,126.978596],[37.564532,126.978455],[37.564523,126.978212],[37.564523,126.978177]]},{"link_id":"1010039000","road_name":"소공로","start":"시청앞교차로","end":"서울프라자호텔","dist_m":82.0,"speed_kmh":9.0,"congestion":"정체","coords":[[37.564536,126.978039],[37.56465,126.977606],[37.564723,126.977431],[37.564771,126.977365],[37.56484,126.977305],[37.564902,126.977271]]},{"link_id":"1010045900","road_name":"새문안로2길","start":"조선일보본사","end":"덕수초교앞","dist_m":112.0,"speed_kmh":29.0,"congestion":"원활","coords":[[37.56937,126.974462],[37.569377,126.975113],[37.56938,126.975468],[37.569393,126.975734]]},{"link_id":"1010046000","road_name":"새문안로2길","start":"덕수초교앞","end":"조선일보본사","dist_m":110.0,"speed_kmh":17.0,"congestion":"서행","coords":[[37.569499,126.97569],[37.569488,126.975464],[37.569485,126.975111],[37.569478,126.974443]]}]};
+
+/* 서울시 실시간 도시데이터 121개 장소 (중심 좌표·범위). 출처: 열린데이터광장 '서울시 주요 121장소 영역' */
+const HOTSPOTS = [{"cd": "POI001", "nm": "강남 MICE 관광특구", "cat": "관광특구", "lat": 37.51128, "lng": 127.06005, "bbox": [37.50789, 127.05701, 37.5139, 127.06289]}, {"cd": "POI002", "nm": "동대문 관광특구", "cat": "관광특구", "lat": 37.56721, "lng": 127.00755, "bbox": [37.56457, 127.00428, 37.56976, 127.018]}, {"cd": "POI003", "nm": "명동 관광특구", "cat": "관광특구", "lat": 37.56414, "lng": 126.98288, "bbox": [37.55768, 126.97563, 37.56929, 126.9888]}, {"cd": "POI004", "nm": "이태원 관광특구", "cat": "관광특구", "lat": 37.53476, "lng": 126.99592, "bbox": [37.53024, 126.98806, 37.53894, 127.00271]}, {"cd": "POI005", "nm": "잠실 관광특구", "cat": "관광특구", "lat": 37.51869, "lng": 127.11694, "bbox": [37.50584, 127.09272, 37.52591, 127.13095]}, {"cd": "POI006", "nm": "종로·청계 관광특구", "cat": "관광특구", "lat": 37.56984, "lng": 126.99867, "bbox": [37.56813, 126.97751, 37.57305, 127.01566]}, {"cd": "POI007", "nm": "홍대 관광특구", "cat": "관광특구", "lat": 37.55506, "lng": 126.92159, "bbox": [37.54786, 126.91168, 37.56179, 126.93164]}, {"cd": "POI008", "nm": "경복궁", "cat": "고궁·문화유산", "lat": 37.58092, "lng": 126.97765, "bbox": [37.5757, 126.9736, 37.58374, 126.98013]}, {"cd": "POI010", "nm": "보신각", "cat": "고궁·문화유산", "lat": 37.5709, "lng": 126.98338, "bbox": [37.56847, 126.98053, 37.57268, 126.98588]}, {"cd": "POI011", "nm": "서울 암사동 유적", "cat": "고궁·문화유산", "lat": 37.56103, "lng": 127.13078, "bbox": [37.55799, 127.12799, 37.56384, 127.13288]}, {"cd": "POI012", "nm": "창덕궁·종묘", "cat": "고궁·문화유산", "lat": 37.57953, "lng": 126.99417, "bbox": [37.57045, 126.98767, 37.58764, 127.00032]}, {"cd": "POI013", "nm": "가산디지털단지역", "cat": "인구밀집지역", "lat": 37.48267, "lng": 126.88015, "bbox": [37.47494, 126.87176, 37.48667, 126.88989]}, {"cd": "POI014", "nm": "강남역", "cat": "인구밀집지역", "lat": 37.5002, "lng": 127.02822, "bbox": [37.49253, 127.02283, 37.50502, 127.03339]}, {"cd": "POI015", "nm": "건대입구역", "cat": "인구밀집지역", "lat": 37.54001, "lng": 127.06718, "bbox": [37.53688, 127.06284, 37.54412, 127.07448]}, {"cd": "POI016", "nm": "고덕역", "cat": "인구밀집지역", "lat": 37.55338, "lng": 127.15503, "bbox": [37.5517, 127.15281, 37.55538, 127.15657]}, {"cd": "POI017", "nm": "고속터미널역", "cat": "인구밀집지역", "lat": 37.50472, "lng": 127.00542, "bbox": [37.50221, 127.00107, 37.50739, 127.01042]}, {"cd": "POI018", "nm": "교대역", "cat": "인구밀집지역", "lat": 37.49185, "lng": 127.01457, "bbox": [37.48786, 127.01083, 37.49525, 127.01791]}, {"cd": "POI019", "nm": "구로디지털단지역", "cat": "인구밀집지역", "lat": 37.48349, "lng": 126.89558, "bbox": [37.48051, 126.89074, 37.48788, 126.90291]}, {"cd": "POI020", "nm": "구로역", "cat": "인구밀집지역", "lat": 37.50152, "lng": 126.88286, "bbox": [37.50027, 126.87979, 37.50446, 126.88418]}, {"cd": "POI021", "nm": "군자역", "cat": "인구밀집지역", "lat": 37.55592, "lng": 127.08009, "bbox": [37.55405, 127.07641, 37.55884, 127.08483]}, {"cd": "POI023", "nm": "대림역", "cat": "인구밀집지역", "lat": 37.49282, "lng": 126.89567, "bbox": [37.48877, 126.8905, 37.49609, 126.9004]}, {"cd": "POI024", "nm": "동대문역", "cat": "인구밀집지역", "lat": 37.57127, "lng": 127.00969, "bbox": [37.56963, 127.00667, 37.57369, 127.01265]}, {"cd": "POI025", "nm": "뚝섬역", "cat": "인구밀집지역", "lat": 37.54825, "lng": 127.04603, "bbox": [37.54548, 127.03927, 37.5516, 127.05068]}, {"cd": "POI026", "nm": "미아사거리역", "cat": "인구밀집지역", "lat": 37.61245, "lng": 127.03058, "bbox": [37.6078, 127.02794, 37.61661, 127.03506]}, {"cd": "POI027", "nm": "발산역", "cat": "인구밀집지역", "lat": 37.55797, "lng": 126.8418, "bbox": [37.55536, 126.83317, 37.56336, 126.84572]}, {"cd": "POI029", "nm": "사당역", "cat": "인구밀집지역", "lat": 37.47635, "lng": 126.9813, "bbox": [37.47355, 126.97791, 37.48076, 126.98554]}, {"cd": "POI030", "nm": "삼각지역", "cat": "인구밀집지역", "lat": 37.53532, "lng": 126.97393, "bbox": [37.53399, 126.97184, 37.53702, 126.97591]}, {"cd": "POI031", "nm": "서울대입구역", "cat": "인구밀집지역", "lat": 37.48061, "lng": 126.9536, "bbox": [37.47804, 126.95015, 37.48356, 126.95582]}, {"cd": "POI032", "nm": "서울식물원·마곡나루역", "cat": "인구밀집지역", "lat": 37.56745, "lng": 126.82986, "bbox": [37.56342, 126.82439, 37.57257, 126.83759]}, {"cd": "POI033", "nm": "서울역", "cat": "인구밀집지역", "lat": 37.55662, "lng": 126.97217, "bbox": [37.55309, 126.96917, 37.5597, 126.97686]}, {"cd": "POI034", "nm": "선릉역", "cat": "인구밀집지역", "lat": 37.50584, "lng": 127.04891, "bbox": [37.50127, 127.04181, 37.51118, 127.05725]}, {"cd": "POI035", "nm": "성신여대입구역", "cat": "인구밀집지역", "lat": 37.59263, "lng": 127.01659, "bbox": [37.59044, 127.01466, 37.5946, 127.01894]}, {"cd": "POI036", "nm": "수유역", "cat": "인구밀집지역", "lat": 37.64112, "lng": 127.02646, "bbox": [37.6359, 127.02212, 37.6457, 127.03086]}, {"cd": "POI037", "nm": "신논현역·논현역", "cat": "인구밀집지역", "lat": 37.50848, "lng": 127.02291, "bbox": [37.50442, 127.01983, 37.51151, 127.0265]}, {"cd": "POI038", "nm": "신도림역", "cat": "인구밀집지역", "lat": 37.50941, "lng": 126.89096, "bbox": [37.5076, 126.88792, 37.51044, 126.89234]}, {"cd": "POI039", "nm": "신림역", "cat": "인구밀집지역", "lat": 37.48397, "lng": 126.92987, "bbox": [37.48087, 126.92604, 37.48774, 126.93343]}, {"cd": "POI040", "nm": "신촌·이대역", "cat": "인구밀집지역", "lat": 37.55564, "lng": 126.93761, "bbox": [37.55319, 126.9321, 37.56024, 126.94664]}, {"cd": "POI041", "nm": "양재역", "cat": "인구밀집지역", "lat": 37.48451, "lng": 127.03551, "bbox": [37.48182, 127.02938, 37.48852, 127.03805]}, {"cd": "POI042", "nm": "역삼역", "cat": "인구밀집지역", "lat": 37.50011, "lng": 127.03721, "bbox": [37.49646, 127.03289, 37.5041, 127.04444]}, {"cd": "POI043", "nm": "연신내역", "cat": "인구밀집지역", "lat": 37.61904, "lng": 126.9218, "bbox": [37.61603, 126.91788, 37.62104, 126.92549]}, {"cd": "POI044", "nm": "오목교역·목동운동장", "cat": "인구밀집지역", "lat": 37.53175, "lng": 126.87925, "bbox": [37.52214, 126.86932, 37.53793, 126.88699]}, {"cd": "POI045", "nm": "왕십리역", "cat": "인구밀집지역", "lat": 37.56164, "lng": 127.03858, "bbox": [37.55797, 127.03561, 37.56593, 127.04166]}, {"cd": "POI046", "nm": "용산역", "cat": "인구밀집지역", "lat": 37.5306, "lng": 126.95954, "bbox": [37.52484, 126.95451, 37.53546, 126.96814]}, {"cd": "POI047", "nm": "이태원역", "cat": "인구밀집지역", "lat": 37.53485, "lng": 126.99261, "bbox": [37.53287, 126.99008, 37.5356, 126.99566]}, {"cd": "POI048", "nm": "장지역", "cat": "인구밀집지역", "lat": 37.47861, "lng": 127.12424, "bbox": [37.47624, 127.11687, 37.48251, 127.12785]}, {"cd": "POI049", "nm": "장한평역", "cat": "인구밀집지역", "lat": 37.56285, "lng": 127.06235, "bbox": [37.5581, 127.05797, 37.56517, 127.07113]}, {"cd": "POI050", "nm": "천호역", "cat": "인구밀집지역", "lat": 37.53921, "lng": 127.1247, "bbox": [37.53694, 127.122, 37.54142, 127.12784]}, {"cd": "POI051", "nm": "총신대입구(이수)역", "cat": "인구밀집지역", "lat": 37.48678, "lng": 126.98075, "bbox": [37.48275, 126.97821, 37.48999, 126.98354]}, {"cd": "POI052", "nm": "충정로역", "cat": "인구밀집지역", "lat": 37.55952, "lng": 126.96421, "bbox": [37.55695, 126.96035, 37.56226, 126.96763]}, {"cd": "POI053", "nm": "합정역", "cat": "인구밀집지역", "lat": 37.54857, "lng": 126.91085, "bbox": [37.54545, 126.90498, 37.55419, 126.9184]}, {"cd": "POI054", "nm": "혜화역", "cat": "인구밀집지역", "lat": 37.58237, "lng": 127.00144, "bbox": [37.57958, 126.99752, 37.58516, 127.00468]}, {"cd": "POI055", "nm": "홍대입구역(2호선)", "cat": "인구밀집지역", "lat": 37.55607, "lng": 126.9233, "bbox": [37.55432, 126.92068, 37.55896, 126.92575]}, {"cd": "POI056", "nm": "회기역", "cat": "인구밀집지역", "lat": 37.59054, "lng": 127.057, "bbox": [37.58771, 127.04976, 37.59298, 127.06245]}, {"cd": "POI058", "nm": "가락시장", "cat": "발달상권", "lat": 37.49445, "lng": 127.11055, "bbox": [37.48965, 127.10364, 37.49719, 127.11925]}, {"cd": "POI059", "nm": "가로수길", "cat": "발달상권", "lat": 37.52266, "lng": 127.02543, "bbox": [37.51611, 127.01782, 37.52717, 127.02846]}, {"cd": "POI072", "nm": "여의도", "cat": "발달상권", "lat": 37.52549, "lng": 126.92339, "bbox": [37.51557, 126.90981, 37.53604, 126.9443]}, {"cd": "POI060", "nm": "광장(전통)시장", "cat": "발달상권", "lat": 37.56982, "lng": 127.00015, "bbox": [37.56884, 126.99785, 37.57101, 127.00203]}, {"cd": "POI061", "nm": "김포공항", "cat": "발달상권", "lat": 37.56229, "lng": 126.8029, "bbox": [37.55537, 126.79369, 37.56977, 126.80835]}, {"cd": "POI063", "nm": "노량진", "cat": "발달상권", "lat": 37.51369, "lng": 126.94907, "bbox": [37.51085, 126.93509, 37.5166, 126.9556]}, {"cd": "POI064", "nm": "덕수궁길·정동길", "cat": "발달상권", "lat": 37.56597, "lng": 126.97244, "bbox": [37.56418, 126.96791, 37.56875, 126.9771]}, {"cd": "POI090", "nm": "난지한강공원", "cat": "공원", "lat": 37.56632, "lng": 126.8777, "bbox": [37.55839, 126.86406, 37.57475, 126.89206]}, {"cd": "POI091", "nm": "남산공원", "cat": "공원", "lat": 37.55507, "lng": 126.99365, "bbox": [37.54091, 126.97655, 37.56136, 127.00837]}, {"cd": "POI066", "nm": "북촌한옥마을", "cat": "발달상권", "lat": 37.58426, "lng": 126.98386, "bbox": [37.5754, 126.97922, 37.59041, 126.98981]}, {"cd": "POI067", "nm": "서촌", "cat": "발달상권", "lat": 37.58019, "lng": 126.96662, "bbox": [37.57591, 126.9638, 37.5844, 126.97423]}, {"cd": "POI068", "nm": "성수카페거리", "cat": "발달상권", "lat": 37.54228, "lng": 127.0556, "bbox": [37.53919, 127.04953, 37.54689, 127.06423]}, {"cd": "POI070", "nm": "쌍문역", "cat": "인구밀집지역", "lat": 37.64769, "lng": 127.03239, "bbox": [37.64287, 127.03009, 37.65137, 127.03744]}, {"cd": "POI071", "nm": "압구정로데오거리", "cat": "발달상권", "lat": 37.5256, "lng": 127.0404, "bbox": [37.52152, 127.0331, 37.52917, 127.04734]}, {"cd": "POI073", "nm": "연남동", "cat": "발달상권", "lat": 37.56143, "lng": 126.92406, "bbox": [37.55757, 126.91629, 37.56527, 126.92814]}, {"cd": "POI074", "nm": "영등포 타임스퀘어", "cat": "발달상권", "lat": 37.51653, "lng": 126.90524, "bbox": [37.51342, 126.90109, 37.51998, 126.91243]}, {"cd": "POI076", "nm": "용리단길", "cat": "발달상권", "lat": 37.53111, "lng": 126.97147, "bbox": [37.52931, 126.96882, 37.5331, 126.9735]}, {"cd": "POI077", "nm": "이태원 앤틱가구거리", "cat": "발달상권", "lat": 37.53187, "lng": 126.99343, "bbox": [37.52939, 126.98994, 37.53452, 126.99672]}, {"cd": "POI078", "nm": "인사동", "cat": "발달상권", "lat": 37.574, "lng": 126.98606, "bbox": [37.57019, 126.983, 37.57741, 126.99061]}, {"cd": "POI079", "nm": "창동 신경제 중심지", "cat": "발달상권", "lat": 37.65617, "lng": 127.05329, "bbox": [37.65112, 127.04205, 37.66202, 127.06697]}, {"cd": "POI080", "nm": "청담동 명품거리", "cat": "발달상권", "lat": 37.52646, "lng": 127.04354, "bbox": [37.52319, 127.03914, 37.5289, 127.04829]}, {"cd": "POI081", "nm": "청량리 제기동 일대 전통시장", "cat": "발달상권", "lat": 37.57998, "lng": 127.03828, "bbox": [37.5782, 127.03491, 37.58314, 127.0459]}, {"cd": "POI082", "nm": "해방촌·경리단길", "cat": "발달상권", "lat": 37.54144, "lng": 126.98837, "bbox": [37.53829, 126.98294, 37.54703, 126.9937]}, {"cd": "POI083", "nm": "DDP(동대문디자인플라자)", "cat": "발달상권", "lat": 37.56654, "lng": 127.00993, "bbox": [37.56549, 127.00772, 37.56875, 127.0127]}, {"cd": "POI084", "nm": "DMC(디지털미디어시티)", "cat": "발달상권", "lat": 37.57741, "lng": 126.89367, "bbox": [37.57298, 126.88204, 37.58655, 126.90209]}, {"cd": "POI085", "nm": "강서한강공원", "cat": "공원", "lat": 37.58587, "lng": 126.82002, "bbox": [37.58085, 126.81066, 37.59134, 126.82937]}, {"cd": "POI086", "nm": "고척돔", "cat": "공원", "lat": 37.49777, "lng": 126.86713, "bbox": [37.49509, 126.86487, 37.49965, 126.86898]}, {"cd": "POI087", "nm": "광나루한강공원", "cat": "공원", "lat": 37.55087, "lng": 127.12371, "bbox": [37.52401, 127.10147, 37.57542, 127.16499]}, {"cd": "POI088", "nm": "광화문광장", "cat": "공원", "lat": 37.57505, "lng": 126.97681, "bbox": [37.57032, 126.9744, 37.57619, 126.97913]}, {"cd": "POI089", "nm": "국립중앙박물관·용산가족공원", "cat": "공원", "lat": 37.52202, "lng": 126.98247, "bbox": [37.51992, 126.97671, 37.52526, 126.9858]}, {"cd": "POI092", "nm": "노들섬", "cat": "공원", "lat": 37.51756, "lng": 126.95871, "bbox": [37.51605, 126.95494, 37.51918, 126.96253]}, {"cd": "POI093", "nm": "뚝섬한강공원", "cat": "공원", "lat": 37.52882, "lng": 127.07461, "bbox": [37.52646, 127.05869, 37.5333, 127.08903]}, {"cd": "POI094", "nm": "망원한강공원", "cat": "공원", "lat": 37.5548, "lng": 126.89824, "bbox": [37.54605, 126.89184, 37.5605, 126.91017]}, {"cd": "POI095", "nm": "반포한강공원", "cat": "공원", "lat": 37.51065, "lng": 126.99458, "bbox": [37.50433, 126.98025, 37.51738, 127.00744]}, {"cd": "POI096", "nm": "북서울꿈의숲", "cat": "공원", "lat": 37.62273, "lng": 127.04091, "bbox": [37.61508, 127.03593, 37.62952, 127.04643]}, {"cd": "POI098", "nm": "서리풀공원·몽마르뜨공원", "cat": "공원", "lat": 37.49022, "lng": 127.00174, "bbox": [37.4827, 126.99671, 37.50318, 127.01035]}, {"cd": "POI100", "nm": "서울대공원", "cat": "공원", "lat": 37.4284, "lng": 127.01864, "bbox": [37.41551, 127.00138, 37.43984, 127.03038]}, {"cd": "POI101", "nm": "서울숲공원", "cat": "공원", "lat": 37.54403, "lng": 127.03673, "bbox": [37.53719, 127.02751, 37.55118, 127.04399]}, {"cd": "POI102", "nm": "아차산", "cat": "공원", "lat": 37.56307, "lng": 127.10048, "bbox": [37.55085, 127.08802, 37.57942, 127.12084]}, {"cd": "POI112", "nm": "청계산", "cat": "공원", "lat": 37.44337, "lng": 127.04697, "bbox": [37.42829, 127.03475, 37.45665, 127.06984]}, {"cd": "POI103", "nm": "양화한강공원", "cat": "공원", "lat": 37.5403, "lng": 126.89964, "bbox": [37.53531, 126.8897, 37.5474, 126.90683]}, {"cd": "POI104", "nm": "어린이대공원", "cat": "공원", "lat": 37.54957, "lng": 127.08243, "bbox": [37.54511, 127.07413, 37.55311, 127.0897]}, {"cd": "POI105", "nm": "여의도한강공원", "cat": "공원", "lat": 37.52869, "lng": 126.92628, "bbox": [37.51783, 126.90922, 37.53585, 126.94392]}, {"cd": "POI106", "nm": "월드컵공원", "cat": "공원", "lat": 37.56604, "lng": 126.8874, "bbox": [37.55976, 126.86577, 37.58002, 126.89971]}, {"cd": "POI107", "nm": "응봉산", "cat": "공원", "lat": 37.54797, "lng": 127.02905, "bbox": [37.54387, 127.02454, 37.55445, 127.03565]}, {"cd": "POI108", "nm": "이촌한강공원", "cat": "공원", "lat": 37.52139, "lng": 126.96357, "bbox": [37.5144, 126.95107, 37.53041, 126.98301]}, {"cd": "POI109", "nm": "잠실종합운동장", "cat": "공원", "lat": 37.51611, "lng": 127.0723, "bbox": [37.51083, 127.06974, 37.51806, 127.07814]}, {"cd": "POI110", "nm": "잠실한강공원", "cat": "공원", "lat": 37.51981, "lng": 127.08507, "bbox": [37.51697, 127.06769, 37.52376, 127.10192]}, {"cd": "POI111", "nm": "잠원한강공원", "cat": "공원", "lat": 37.52336, "lng": 127.01397, "bbox": [37.51649, 127.00624, 37.53218, 127.02372]}, {"cd": "POI114", "nm": "북창동 먹자골목", "cat": "발달상권", "lat": 37.56182, "lng": 126.97748, "bbox": [37.56032, 126.97601, 37.56405, 126.98155]}, {"cd": "POI115", "nm": "남대문시장", "cat": "발달상권", "lat": 37.55967, "lng": 126.97854, "bbox": [37.55768, 126.97563, 37.56176, 126.98213]}, {"cd": "POI116", "nm": "익선동", "cat": "발달상권", "lat": 37.57369, "lng": 126.98868, "bbox": [37.57019, 126.98726, 37.57567, 126.99213]}, {"cd": "POI127", "nm": "올림픽공원", "cat": "공원", "lat": 37.52188, "lng": 127.12368, "bbox": [37.51233, 127.11279, 37.52591, 127.13095]}, {"cd": "POI117", "nm": "신정네거리역", "cat": "인구밀집지역", "lat": 37.52062, "lng": 126.85404, "bbox": [37.5187, 126.85156, 37.52291, 126.85987]}, {"cd": "POI118", "nm": "잠실새내역", "cat": "인구밀집지역", "lat": 37.51083, "lng": 127.08413, "bbox": [37.50776, 127.07831, 37.5123, 127.08892]}, {"cd": "POI119", "nm": "잠실역", "cat": "인구밀집지역", "lat": 37.51174, "lng": 127.09909, "bbox": [37.50983, 127.09475, 37.51477, 127.10614]}, {"cd": "POI120", "nm": "잠실롯데타워·석촌호수", "cat": "발달상권", "lat": 37.51232, "lng": 127.10366, "bbox": [37.50584, 127.09272, 37.51746, 127.11565]}, {"cd": "POI121", "nm": "송리단길·호수단길", "cat": "발달상권", "lat": 37.50767, "lng": 127.10363, "bbox": [37.50416, 127.09722, 37.51192, 127.11224]}, {"cd": "POI122", "nm": "신촌 스타광장", "cat": "발달상권", "lat": 37.55646, "lng": 126.93699, "bbox": [37.55534, 126.93597, 37.55769, 126.93788]}, {"cd": "POI123", "nm": "보라매공원", "cat": "공원", "lat": 37.49315, "lng": 126.91927, "bbox": [37.49052, 126.91557, 37.49618, 126.92412]}, {"cd": "POI124", "nm": "서대문독립공원", "cat": "공원", "lat": 37.57345, "lng": 126.95697, "bbox": [37.57161, 126.95379, 37.57679, 126.96004]}, {"cd": "POI125", "nm": "안양천", "cat": "공원", "lat": 37.51934, "lng": 126.87927, "bbox": [37.51367, 126.87701, 37.52398, 126.88213]}, {"cd": "POI128", "nm": "홍제폭포", "cat": "공원", "lat": 37.58058, "lng": 126.93689, "bbox": [37.57975, 126.93601, 37.58157, 126.93786]}, {"cd": "POI129", "nm": "송현녹지광장", "cat": "공원", "lat": 37.57816, "lng": 126.98375, "bbox": [37.57559, 126.97955, 37.58006, 126.98932]}, {"cd": "POI130", "nm": "시의회 앞", "cat": "인구밀집지역", "lat": 37.56772, "lng": 126.97671, "bbox": [37.56372, 126.97577, 37.57035, 126.9781]}, {"cd": "POI131", "nm": "숭례문", "cat": "인구밀집지역", "lat": 37.56028, "lng": 126.97574, "bbox": [37.55804, 126.97324, 37.56296, 126.97764]}, {"cd": "POI009", "nm": "광화문·덕수궁", "cat": "고궁·문화유산", "lat": 37.56903, "lng": 126.97781, "bbox": [37.56272, 126.97325, 37.57751, 126.98307]}, {"cd": "POI126", "nm": "여의서로", "cat": "공원", "lat": 37.53192, "lng": 126.91381, "bbox": [37.52644, 126.90981, 37.53604, 126.92275]}];
+
+/* ---------- 고려 항목 정의 ---------------------------------------------- */
+const CONG = {'원활':0,'서행':1,'정체':2};
+const FACTORS = [
+  { key:'speed',   label:'통행 속도',     unit:'km/h',    real:true,  desc:'실시간 도로소통 구간 평균속도', get:l=>l.speed_kmh, fmt:v=>v.toFixed(0) },
+  { key:'cong',    label:'혼잡 등급',     unit:'',        real:true,  desc:'원활 0 · 서행 1 · 정체 2',       get:l=>CONG[l.congestion] ?? 1, fmt:v=>['원활','서행','정체'][Math.round(v)]||v },
+  { key:'water',   label:'노면 젖음',     unit:'mm',      real:false, desc:'추정 수막 두께 (젖음 추정 엔진)',   get:l=>l.surface.water_film_mm, fmt:v=>v.toFixed(2) },
+  { key:'icing',   label:'결빙 위험',     unit:'',        real:false, desc:'0 없음 · 1 주의 · 2 경고',         get:l=>l.surface.icing_level, fmt:v=>['없음','주의','경고'][v]||v },
+  { key:'rain',    label:'강우 강도',     unit:'mm/10분', real:true,  desc:'가장 가까운 강우량계 10분 우량',    get:l=>l.rain_10m_mm, fmt:v=>v.toFixed(1) },
+  { key:'incident',label:'공사·사고 근접', unit:'',        real:true,  desc:'돌발지점 500m 이내일수록 1에 가까움', get:l=>l.incident_prox, fmt:v=>v.toFixed(2) },
+  { key:'density', label:'교차로 밀도',   unit:'개/km',   real:true,  desc:'구간이 짧을수록 신호·교차로가 많음', get:l=>l.node_density, fmt:v=>v.toFixed(1) },
+];
+const DEFAULT_ON = ['speed','cong','water','icing','incident'];
+
+/* ---------- 상태 ----------------------------------------------------------- */
+const state = {
+  data:null, live:false, links:[], selected:new Set(DEFAULT_ON),
+  scale:'relative', model:null, training:null,
+  scenario:{ rain:0, since:240, temp:10 }, realWx:null,
+  areas:new Map(), rain:null, loading:new Set()
+};
+try{
+  const saved = JSON.parse(localStorage.getItem('roadpref.v1')||'null');
+  if(saved){ if(Array.isArray(saved.selected)) state.selected=new Set(saved.selected.filter(k=>FACTORS.some(f=>f.key===k))); if(saved.scale) state.scale=saved.scale; }
+}catch(e){}
+function persist(){ try{ localStorage.setItem('roadpref.v1', JSON.stringify({selected:[...state.selected], scale:state.scale})); }catch(e){} }
+
+/* ---------- 유틸 ----------------------------------------------------------- */
+const $ = s=>document.querySelector(s);
+function hashUnit(str){ let h=2166136261; for(const c of str){ h^=c.charCodeAt(0); h=Math.imul(h,16777619);} return ((h>>>0)%10000)/10000; }
+function haversine(a,b){ const R=6371000,toR=x=>x*Math.PI/180; const dLat=toR(b[0]-a[0]), dLng=toR(b[1]-a[1]); const s=Math.sin(dLat/2)**2+Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(s)); }
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------- 색 ------------------------------------------------------------- */
+const STOPS = [[0,[215,48,31]],[0.5,[242,177,52]],[1,[26,152,80]]];
+function colorAt(t){
+  t=Math.max(0,Math.min(1,t));
+  for(let i=1;i<STOPS.length;i++){ const [p1,c1]=STOPS[i-1],[p2,c2]=STOPS[i]; if(t<=p2){ const u=(t-p1)/(p2-p1); return `rgb(${c1.map((c,j)=>Math.round(c+(c2[j]-c)*u)).join(',')})`; } }
+  return 'rgb(26,152,80)';
+}
+
+/* ---------- 노면 젖음 추정 (데모용 단순 엔진) ---------------------------- */
+function estimateSurface(link, wx){
+  const drain = 0.7 + 0.6*hashUnit(link.link_id);              // 배수·그늘 등 구간별 편차
+  const evap = 0.006 * (1.15 - wx.humidity_pct/100) * (1 + 0.25*wx.wind_ms) * (wx.temp_c>0 ? 1+wx.temp_c/30 : 0.4);
+  let W;
+  if(wx.rain_10m_mm>0) W = Math.min(3, (0.25 + 0.45*wx.rain_10m_mm) * drain);
+  else W = Math.max(0, 1.4*drain - wx.minutes_since_rain * evap * 10 / drain);
+  W = Math.round(W*100)/100;
+  let state = W===0 ? 'DRY' : (wx.rain_10m_mm>0 ? 'RAINING' : (W>0.5 ? 'WET' : 'DAMP'));
+  if(wx.rain_10m_mm>0 && wx.temp_c<=0) state='SNOW';
+  const icing_level = W>0 ? (wx.temp_c<=0 ? 2 : wx.temp_c<=2 ? 1 : 0) : 0;
+  return { state, water_film_mm:W, icing_level };
+}
+
+/* ---------- 데이터 준비 ---------------------------------------------------- */
+function nearestLoadedArea(){
+  const c=map.getCenter(); let best=null, bd=Infinity;
+  for(const [cd] of state.areas){ const h=HOTSPOTS.find(x=>x.cd===cd); if(!h) continue; const d=haversine([c.lat,c.lng],[h.lat,h.lng]); if(d<bd){bd=d;best=cd;} }
+  return best;
+}
+function areaWeather(cd){
+  const a = state.areas.get(cd); const w = a ? a.data.weather : (state.realWx||{temp_c:15,humidity_pct:50,wind_ms:1,precip_type:'없음'});
+  const r = state.rain || { rain_10m_mm:0, minutes_since_rain:240 };
+  const raining = w.precip_type && w.precip_type!=='없음';
+  return { ...w,
+    rain_10m_mm: raining ? Math.max(0.5, r.rain_10m_mm, (w.precip_mm||0)/6) : 0,
+    minutes_since_rain: raining ? 0 : r.minutes_since_rain };
+}
+function currentWeather(){
+  if(state.live) return areaWeather(nearestLoadedArea());
+  const s=state.scenario, r=state.realWx;
+  return { ...r, temp_c:s.temp, rain_10m_mm:s.rain, minutes_since_rain:s.rain>0?0:s.since };
+}
+function prepareLinks(){
+  const inc = state.data.incidents||[];
+  const demoWx = state.live ? null : currentWeather();
+  state.links = state.data.links.map(l=>{
+    const wx = state.live ? areaWeather(l.area_cd) : demoWx;
+    const mid = l.coords[Math.floor(l.coords.length/2)];
+    const dInc = inc.length ? Math.min(...inc.map(i=>haversine(mid,[i.lat,i.lng]))) : Infinity;
+    return { ...l, surface: estimateSurface(l, wx),
+      rain_10m_mm: wx.rain_10m_mm,
+      incident_prox: Math.max(0, 1 - dInc/500),
+      node_density: Math.min(40, 1000/Math.max(25, l.dist_m)) };
+  });
+}
+
+/* ---------- 학습 데이터 ----------------------------------------------------
+   실제 서비스: /api/training 에서 [{speed,cong,water,...,y}] 를 받습니다.
+   (y = 사용자가 남긴 구간 평가, 또는 사고율·지연 기반 지표)
+   데모: 합리적인 관계를 가진 합성 표본 800개를 만듭니다.
+---------------------------------------------------------------------------- */
+function syntheticTraining(n=800){
+  const rnd = mulberry32(20261031), g=()=>{ let u=0,v=0; while(!u)u=rnd(); while(!v)v=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+  const rows=[];
+  for(let i=0;i<n;i++){
+    const cong = Math.floor(rnd()*3);
+    const speed = Math.max(3, [32,20,10][cong] + g()*7);
+    const rain = rnd()<0.6 ? 0 : rnd()*7;
+    const water = rain>0 ? Math.min(3,0.25+0.45*rain*(0.7+0.6*rnd())) : (rnd()<0.5?0:rnd()*1.2);
+    const temp = -6 + rnd()*30;
+    const icing = water>0 ? (temp<=0?2:temp<=2?1:0) : 0;
+    const incident = rnd()<0.75 ? 0 : rnd();
+    const density = 2 + rnd()*30;
+    const y = 58 + 0.55*(speed-20) - 6*cong - 11*water - 13*icing - 1.6*rain - 16*incident - 0.35*(density-15) + g()*5;
+    rows.push({ speed, cong, water, icing, rain, incident, density, y:Math.max(0,Math.min(100,y)) });
+  }
+  return rows;
+}
+
+/* ---------- 다중 선형회귀 (OLS, 정규방정식) ------------------------------ */
+function solve(A,b){ // 가우스 소거 (부분 피벗)
+  const n=b.length, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){
+    let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    [M[c],M[p]]=[M[p],M[c]];
+    const d=M[c][c]||1e-12;
+    for(let r=0;r<n;r++){ if(r===c) continue; const f=M[r][c]/d; for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return M.map((r,i)=>r[n]/(r[i]||1e-12));
+}
+function fitOLS(rows, keys){
+  const n=rows.length, p=keys.length+1;
+  const X=rows.map(r=>[1,...keys.map(k=>r[k])]), y=rows.map(r=>r.y);
+  const XtX=Array.from({length:p},()=>Array(p).fill(0)), Xty=Array(p).fill(0);
+  for(let i=0;i<n;i++) for(let a=0;a<p;a++){ Xty[a]+=X[i][a]*y[i]; for(let b=0;b<p;b++) XtX[a][b]+=X[i][a]*X[i][b]; }
+  for(let a=1;a<p;a++) XtX[a][a]+=1e-8;
+  const coef=solve(XtX,Xty);
+  const yMean=y.reduce((s,v)=>s+v,0)/n;
+  let ssr=0,sst=0; for(let i=0;i<n;i++){ const yh=X[i].reduce((s,v,j)=>s+v*coef[j],0); ssr+=(y[i]-yh)**2; sst+=(y[i]-yMean)**2; }
+  const sd=k=>{ const m=rows.reduce((s,r)=>s+r[k],0)/n; return Math.sqrt(rows.reduce((s,r)=>s+(r[k]-m)**2,0)/(n-1)); };
+  const sdY=sd('y');
+  const beta={}; keys.forEach((k,j)=>beta[k]=coef[j+1]*sd(k)/sdY);
+  return { keys, intercept:coef[0], coef:Object.fromEntries(keys.map((k,j)=>[k,coef[j+1]])), beta, r2: sst? 1-ssr/sst : 0, n };
+}
+
+/* ---------- 점수 계산 ------------------------------------------------------ */
+function scoreLinks(){
+  const keys = FACTORS.filter(f=>state.selected.has(f.key)).map(f=>f.key);
+  state.model = fitOLS(state.training, keys);
+  for(const l of state.links){
+    l.features = Object.fromEntries(FACTORS.map(f=>[f.key, f.get(l)]));
+    l.contrib = Object.fromEntries(keys.map(k=>[k, state.model.coef[k]*l.features[k]]));
+    l.score = Math.max(0, Math.min(100, state.model.intercept + Object.values(l.contrib).reduce((s,v)=>s+v,0)));
+  }
+}
+
+/* ---------- 지도 ----------------------------------------------------------- */
+const map = L.map('map',{zoomControl:true, preferCanvas:true}).setView(CONFIG.CENTER, CONFIG.ZOOM);
+// 배경지도: OpenStreetMap (도로 색이 잘 보이도록 CSS로 흑백 처리). 트래픽이 커지면 VWorld 등 키 발급형 타일로 교체 권장
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19,
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · 데이터: 서울 열린데이터광장'
+}).addTo(map);
+const roadLayer = L.layerGroup().addTo(map);
+const incidentLayer = L.layerGroup().addTo(map);
+let lineByLink = new Map(), fitted=false;
+
+function weightForZoom(z){ return z>=17?7 : z>=16?5.5 : z>=15?4 : 3; }
+
+function draw(){
+  roadLayer.clearLayers(); lineByLink.clear();
+  const b = map.getBounds().pad(0.05);
+  let inView = state.links.filter(l=>l.coords.some(p=>b.contains(p)));
+  if(!inView.length) inView = state.links;
+  const scores = inView.map(l=>l.score);
+  const lo=scores.length?Math.min(...scores):0, hi=scores.length?Math.max(...scores):100;
+  const norm = s => state.scale==='absolute' ? s/100 : (hi-lo<1e-6 ? 0.5 : (s-lo)/(hi-lo));
+  const w = weightForZoom(map.getZoom());
+  // 점수가 높은(좋은) 구간을 위에 그려서 겹칠 때 추천 경로가 보이게
+  [...state.links].sort((a,b)=>a.score-b.score).forEach(l=>{
+    const halo = L.polyline(l.coords,{color:'#fff',weight:w+3,opacity:.9,lineCap:'round',interactive:false}).addTo(roadLayer);
+    const line = L.polyline(l.coords,{color:colorAt(norm(l.score)),weight:w,opacity:.95,lineCap:'round'}).addTo(roadLayer);
+    line.on('click',e=>openPopup(l,e.latlng));
+    line.on('mouseover',()=>line.setStyle({weight:w+3}));
+    line.on('mouseout',()=>line.setStyle({weight:w}));
+    lineByLink.set(l.link_id,{line,halo});
+  });
+  incidentLayer.clearLayers();
+  (state.data.incidents||[]).forEach(i=>{
+    L.circle([i.lat,i.lng],{radius:500,color:'#d7301f',weight:1,opacity:.35,fillOpacity:.04,interactive:false}).addTo(incidentLayer);
+    L.marker([i.lat,i.lng],{icon:L.divIcon({className:'',html:'<div style="width:26px;height:26px;border-radius:50%;background:#14181f;color:#fff;display:grid;place-items:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3)">🚧</div>',iconSize:[26,26],iconAnchor:[13,13]})})
+      .bindPopup(`<div class="pp-title">${i.type} · ${i.detail||''}</div><div class="pp-sub">${i.until?'해제 예정 '+i.until:''}</div><div style="font-size:12px;line-height:1.5">${i.info||''}</div>`)
+      .addTo(incidentLayer);
+  });
+  if(!fitted && state.links.length && !state.live){ map.fitBounds(L.latLngBounds(state.links.flatMap(l=>l.coords)),{padding:[30,30]}); fitted=true; }
+  $('#legendMode').textContent = state.scale==='absolute' ? '절대 0–100' : '화면 내 비교';
+  $('#legLo').textContent = state.scale==='absolute' ? '0 피하기' : `${lo.toFixed(0)}점 피하기`;
+  $('#legHi').textContent = state.scale==='absolute' ? '추천 100' : `추천 ${hi.toFixed(0)}점`;
+}
+map.on('zoomend',()=>{ const w=weightForZoom(map.getZoom()); lineByLink.forEach(({line,halo})=>{ line.setStyle({weight:w}); halo.setStyle({weight:w+3}); }); });
+
+const STATE_KO={DRY:'건조',DAMP:'습윤',WET:'젖음',RAINING:'강우중',SNOW:'적설'};
+function openPopup(l,latlng){
+  const keys=state.model.keys;
+  const rows = keys.map(k=>{ const f=FACTORS.find(x=>x.key===k); const c=l.contrib[k];
+    const v=String(f.fmt(l.features[k])); const txt = (f.unit && /^[-\d.]+$/.test(v)) ? `${v} ${f.unit}` : v;
+    return `<tr><td>${f.label}</td><td>${txt}</td><td class="${c>=0?'pos':'neg'}">${c>=0?'+':''}${c.toFixed(1)}</td></tr>`; }).join('');
+  L.popup({maxWidth:300}).setLatLng(latlng).setContent(`
+    <div class="pp-title">${l.road_name}</div>
+    <div class="pp-sub">${l.start} → ${l.end} · ${l.dist_m.toFixed(0)}m · 노면 ${STATE_KO[l.surface.state]||l.surface.state}</div>
+    <div class="pp-score"><span class="chip" style="background:${colorAt(l.score/100)}"></span><b>${l.score.toFixed(0)}</b><span style="color:var(--ink-3);font-size:12px">/ 100점</span></div>
+    <table class="pp-table"><tr><td style="color:var(--ink-3)">절편</td><td></td><td>${state.model.intercept.toFixed(1)}</td></tr>${rows}</table>
+  `).openOn(map);
+}
+
+/* ---------- 패널 렌더 ------------------------------------------------------ */
+function renderFactors(){
+  const m=state.model, maxB=Math.max(0.01,...Object.values(m.beta).map(Math.abs));
+  $('#factorList').innerHTML = FACTORS.map(f=>{
+    const on=state.selected.has(f.key), b=m.beta[f.key];
+    const coef = on ? `<div class="coef ${b>=0?'pos':'neg'}">β ${b>=0?'+':''}${b.toFixed(2)}<div class="bar"><i style="background:${b>=0?'var(--good)':'var(--bad)'};left:${b>=0?50:50-Math.abs(b)/maxB*50}%;width:${Math.abs(b)/maxB*50}%"></i></div></div>`
+                    : `<div class="coef off">미사용</div>`;
+    return `<label class="factor"><input type="checkbox" data-k="${f.key}" ${on?'checked':''}>
+      <div><div class="name">${f.label}<span class="tag ${f.real?'real':'est'}">${f.real?'실시간':'추정'}</span></div><div class="desc">${f.desc}</div></div>${coef}</label>`;
+  }).join('');
+  $('#factorList').querySelectorAll('input').forEach(cb=>cb.addEventListener('change',e=>{
+    const k=e.target.dataset.k;
+    if(e.target.checked) state.selected.add(k); else { if(state.selected.size===1){ e.target.checked=true; toast('최소 1개 항목은 선택해야 해요'); return; } state.selected.delete(k); }
+    persist(); refresh();
+  }));
+  const terms = m.keys.map(k=>{ const c=m.coef[k], f=FACTORS.find(x=>x.key===k); return `${c>=0?'+':'−'} ${Math.abs(c).toFixed(2)}·${f.label.replace(/\s/g,'')}`; }).join(' ');
+  $('#formula').textContent = `점수 = ${m.intercept.toFixed(1)} ${terms}`;
+  $('#r2').textContent = m.r2.toFixed(3);
+  $('#nTrain').textContent = m.n.toLocaleString();
+  $('#nLinks').textContent = state.links.length;
+}
+function renderWeather(){
+  const wx=currentWeather();
+  $('#wxTemp').textContent = `${wx.temp_c.toFixed(1)}°`;
+  $('#wxHum').textContent = `${Math.round(wx.humidity_pct)}%`;
+  $('#wxWind').textContent = `${wx.wind_ms.toFixed(1)}`;
+  $('#wxRain').textContent = wx.rain_10m_mm>0 ? `${wx.rain_10m_mm}mm` : (wx.precip_type && wx.precip_type!=='없음' ? wx.precip_type : '없음');
+  $('#wxTime').textContent = state.live ? (wx.time||'') : (isScenarioChanged()?'시나리오 적용 중':wx.time||'');
+  const inc=state.data.incidents||[];
+  $('#incidentText').textContent = inc.length ? `🚧 ${inc.length}건: ${inc.map(i=>i.detail||i.type).join(', ')}` : '공사·사고 정보 없음';
+}
+function isScenarioChanged(){ const r=state.realWx,s=state.scenario; return !(s.rain===0 && s.since===240 && Math.abs(s.temp-r.temp_c)<0.01); }
+
+/* ---------- 시나리오 컨트롤 ------------------------------------------------ */
+function bindScenario(){
+  const upd=()=>{ $('#scRainOut').textContent=`${state.scenario.rain} mm`; $('#scSinceOut').textContent= state.scenario.rain>0 ? '비 오는 중' : `${state.scenario.since}분`; $('#scTempOut').textContent=`${state.scenario.temp}℃`; $('#scSince').disabled = state.scenario.rain>0; };
+  const on=(id,key)=>$(id).addEventListener('input',e=>{ state.scenario[key]=parseFloat(e.target.value); upd(); refresh(); });
+  on('#scRain','rain'); on('#scSince','since'); on('#scTemp','temp');
+  $('#scReset').addEventListener('click',()=>{ state.scenario={rain:0,since:240,temp:state.realWx.temp_c}; $('#scRain').value=0; $('#scSince').value=240; $('#scTemp').value=state.realWx.temp_c; upd(); refresh(); });
+  upd();
+}
+
+/* ---------- 흐름 ----------------------------------------------------------- */
+function refresh(){ prepareLinks(); scoreLinks(); renderFactors(); renderWeather(); draw(); }
+
+async function fetchJSON(url){ const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+/* ---------- 실시간 모드: 화면에 보이는 장소의 데이터만 불러오기 ------------ */
+function rebuildLiveData(){
+  const seen=new Set(), links=[], incidents=[]; let latest='';
+  for(const [cd,{data}] of state.areas){
+    for(const l of data.links){ if(seen.has(l.link_id)) continue; seen.add(l.link_id); links.push({...l, area_cd:cd}); }
+    for(const i of (data.incidents||[])){ if(!incidents.some(x=>Math.abs(x.lat-i.lat)<1e-5&&Math.abs(x.lng-i.lng)<1e-5)) incidents.push(i); }
+    if((data.updated_at||'')>latest) latest=data.updated_at;
+  }
+  state.data = { source:`서울시 실시간 도시데이터 · ${state.areas.size}개 장소`, updated_at:latest, links, incidents };
+  state.realWx = state.areas.size ? state.areas.get(nearestLoadedArea()).data.weather : state.realWx;
+}
+function areasInView(){
+  const b=map.getBounds().pad(0.1), c=map.getCenter();
+  return HOTSPOTS.filter(h=>b.intersects(L.latLngBounds([h.bbox[0],h.bbox[1]],[h.bbox[2],h.bbox[3]])))
+    .sort((a,z)=>haversine([c.lat,c.lng],[a.lat,a.lng])-haversine([c.lat,c.lng],[z.lat,z.lng]))
+    .slice(0, CONFIG.MAX_AREAS);
+}
+async function ensureAreas(force=false){
+  const want = areasInView();
+  if(!want.length){ if(map.getZoom()>=13) toast('이 지역은 아직 실시간 도시데이터 범위 밖이에요'); return; }
+  const now=Date.now();
+  const todo = want.filter(h=>!state.loading.has(h.cd) && (force || !state.areas.has(h.cd) || now-state.areas.get(h.cd).at > CONFIG.REFRESH_MS));
+  if(!todo.length) return;
+  todo.forEach(h=>state.loading.add(h.cd));
+  const results = await Promise.allSettled(todo.map(h=>fetchJSON(`${CONFIG.API_AREA}?cd=${h.cd}`)));
+  results.forEach((r,i)=>{ const cd=todo[i].cd; state.loading.delete(cd); if(r.status==='fulfilled' && r.value && Array.isArray(r.value.links)) state.areas.set(cd,{at:Date.now(),data:r.value}); });
+  const fails = results.filter(r=>r.status!=='fulfilled').length;
+  if(fails) toast(`${fails}곳의 데이터를 불러오지 못했어요`);
+  rebuildLiveData(); refresh(); updateHeader();
+}
+async function loadRain(){ try{ state.rain = await fetchJSON(CONFIG.API_RAIN); }catch(e){} }
+function updateHeader(){
+  $('#modeBadge').classList.toggle('live', state.live);
+  $('#modeText').textContent = state.live ? '실시간' : '데모 스냅샷';
+  $('#srcText').textContent = `${state.data.source||''} · ${state.data.updated_at||''} 기준`;
+}
+
+async function load(){
+  // /api/rain 이 응답하면 실시간 모드 (Vercel 배포 + SEOUL_API_KEY 설정 완료 상태)
+  try{ const r=await fetchJSON(CONFIG.API_RAIN); if(r && r.ok) { state.live=true; state.rain=r; } }catch(e){ state.live=false; }
+  try{ const t=await fetchJSON(CONFIG.API_TRAINING); if(Array.isArray(t)&&t.length>30) state.training=t; }catch(e){}
+  if(!state.training) state.training = syntheticTraining();
+  $('#scenarioSection').style.display = state.live ? 'none' : '';
+  document.querySelectorAll('#scaleSeg button').forEach(b=>b.classList.toggle('on', b.dataset.v===state.scale));
+
+  if(state.live){
+    state.data = { links:[], incidents:[], source:'서울시 실시간 도시데이터', updated_at:'' };
+    state.realWx = { ...DEMO.weather };
+    await ensureAreas(true);
+    let t; map.on('moveend',()=>{ clearTimeout(t); t=setTimeout(()=>ensureAreas(false),400); });
+    setInterval(async()=>{ await loadRain(); await ensureAreas(true); toast('최신 도로 상태로 갱신했어요'); }, CONFIG.REFRESH_MS);
+  }else{
+    state.data = DEMO;
+    state.realWx = { ...DEMO.weather };
+    state.scenario.temp = state.realWx.temp_c; $('#scTemp').value = state.realWx.temp_c;
+    map.on('moveend',()=>{ if(state.scale==='relative') draw(); });
+    refresh(); updateHeader();
+  }
+}
+
+document.querySelectorAll('#scaleSeg button').forEach(b=>b.addEventListener('click',()=>{ state.scale=b.dataset.v; document.querySelectorAll('#scaleSeg button').forEach(x=>x.classList.toggle('on',x===b)); persist(); draw(); }));
+$('#panelToggle').addEventListener('click',()=>{ const p=$('#panel'); const o=p.classList.toggle('open'); $('#panelToggle').setAttribute('aria-expanded',o); });
+bindScenario();
+load();
+</script>
+</body>
+</html>
